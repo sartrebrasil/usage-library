@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>dev.usageplatform</groupId>
+  <artifactId>usage-platform</artifactId>
+  <version>0.1.0-SNAPSHOT</version>
+  <packaging>pom</packaging>
+
+  <modules>
+    <module>usage-bom</module>
+    <module>usage-core</module>
+    <module>usage-gateway</module>
+    <module>usage-processor</module>
+    <module>usage-consumer</module>
+    <module>usage-redis</module>
+    <module>usage-postgres</module>
+    <module>usage-messaging</module>
+    <module>usage-spring-boot-starter</module>
+    <module>usage-demo</module>
+  </modules>
+
+  <properties>
+    <maven.compiler.release>21</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <spring-boot.version>4.2.0</spring-boot.version>
+    <spring-cloud-gateway.version>5.1.0</spring-cloud-gateway.version>
+    <!-- The two libraries below are yours and exist only in your local ~/.m2: run `mvn install` in each first
+         (messaging-library: messaging-inbox, messaging-spring-boot-starter, messaging-rabbitmq;
+          outbox-library: outbox-core, outbox-spring-boot-starter, outbox-broker-messaging). -->
+    <messaging-library.version>0.1.0-SNAPSHOT</messaging-library.version>
+    <outbox-library.version>0.2.0-SNAPSHOT</outbox-library.version>
+  </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-dependencies</artifactId>
+        <version>${spring-boot.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>dev.usageplatform</groupId>
+        <artifactId>usage-bom</artifactId>
+        <version>${project.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency><groupId>org.springframework.cloud</groupId><artifactId>spring-cloud-starter-gateway-server-webflux</artifactId><version>${spring-cloud-gateway.version}</version></dependency>
+      <!-- your two libraries publish BOMs: import them, they carry the versions of every artifact used here -->
+      <dependency>
+        <groupId>com.example.messaging</groupId>
+        <artifactId>messaging-bom</artifactId>
+        <version>${messaging-library.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.example.outbox</groupId>
+        <artifactId>outbox-bom</artifactId>
+        <version>${outbox-library.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <build>
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-compiler-plugin</artifactId>
+          <version>3.13.0</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-surefire-plugin</artifactId>
+          <version>3.5.2</version>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+  </build>
+</project>

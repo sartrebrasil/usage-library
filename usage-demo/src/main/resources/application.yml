@@ -1,0 +1,49 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: usage-demo
+  datasource:
+    url: jdbc:postgresql://localhost:5432/usage
+    username: usage
+    password: usage
+  cloud:
+    gateway:
+      server:
+        webflux:
+          routes:
+            # everything under /api goes to the "backend" of this same demo (UpstreamController)
+            - id: backend
+              uri: http://localhost:${server.port}
+              predicates:
+                - Path=/api/**
+              filters:
+                - RewritePath=/api/(?<rest>.*), /upstream/$\{rest}
+
+usage:
+  fail-mode: OPEN              # if Redis or PostgreSQL go down, let requests through (CLOSED refuses them)
+  redis:
+    uri: redis://localhost:6379
+  postgres:
+    migrate: true              # creates the platform's tables, in the "usage" schema
+  gateway:
+    enabled: true
+    refund-from-status: 500    # a 5xx gives the quota back
+    metrics:
+      - code: API_REQUESTS
+        mode: ACCESS           # counted when the request arrives
+        cost-header: X-Item-Count   # a batch can say how many items it carries (a client claim)
+  consumer:
+    enabled: true              # the in-process consumer that the demo's UsageSink hands events to
+    known-metrics: [API_REQUESTS, ITEMS_PROCESSED]
+  processor:                   # the worker (async package) counts ITEMS_PROCESSED only after processing
+    metric: ITEMS_PROCESSED
+    countable-statuses: [COMPLETED]   # REJECTED and FAILED are final too, but not billable
+    defer-when-over-quota: true       # a message of a tenant already over quota waits instead of being processed
+  maintenance:
+    enabled: true              # closes finished periods and repairs the Redis counters from the ledger
+
+logging:
+  level:
+    dev.usageplatform: INFO

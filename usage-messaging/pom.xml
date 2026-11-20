@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>dev.usageplatform</groupId>
+    <artifactId>usage-platform</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>usage-messaging</artifactId>
+  <name>usage-messaging</name>
+  <description>Connects the platform to a broker through messaging-library (inbox) and outbox-library: no broker code here.</description>
+
+  <dependencies>
+    <dependency>
+      <groupId>dev.usageplatform</groupId>
+      <artifactId>usage-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>dev.usageplatform</groupId>
+      <artifactId>usage-consumer</artifactId>
+    </dependency>
+    <!-- the two libraries are yours: install them locally first (mvn install in each) -->
+    <dependency>
+      <groupId>com.example.messaging</groupId>
+      <artifactId>messaging-inbox</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.example.outbox</groupId>
+      <artifactId>outbox-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>dev.usageplatform</groupId>
+      <artifactId>usage-processor</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- the real-broker test: RabbitMQ through messaging-library, the outbox relay, PostgreSQL -->
+    <dependency>
+      <groupId>dev.usageplatform</groupId>
+      <artifactId>usage-postgres</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.example.messaging</groupId>
+      <artifactId>messaging-rabbitmq</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.rabbitmq</groupId>
+      <artifactId>amqp-client</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.example.outbox</groupId>
+      <artifactId>outbox-broker-messaging</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.example.outbox</groupId>
+      <artifactId>outbox-spring-boot-starter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-jdbc</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.micrometer</groupId>
+      <artifactId>micrometer-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers-junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers-postgresql</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+</project>

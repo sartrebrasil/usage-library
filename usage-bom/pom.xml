@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <!-- No parent on purpose: whoever imports this BOM gets the versions of the platform's modules and nothing else
+       (not the Spring Boot BOM, not the plugins of the build). -->
+  <groupId>dev.usageplatform</groupId>
+  <artifactId>usage-bom</artifactId>
+  <version>0.1.0-SNAPSHOT</version>
+  <packaging>pom</packaging>
+  <name>usage-bom</name>
+  <description>Versions of every usage-platform module, to import with scope "import".</description>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency><groupId>dev.usageplatform</groupId><artifactId>usage-core</artifactId><version>${project.version}</version></dependency>
+      <dependency><groupId>dev.usageplatform</groupId><artifactId>usage-gateway</artifactId><version>${project.version}</version></dependency>
+      <dependency><groupId>dev.usageplatform</groupId><artifactId>usage-processor</artifactId><version>${project.version}</version></dependency>
+      <dependency><groupId>dev.usageplatform</groupId><artifactId>usage-consumer</artifactId><version>${project.version}</version></dependency>
+      <dependency><groupId>dev.usageplatform</groupId><artifactId>usage-redis</artifactId><version>${project.version}</version></dependency>
+      <dependency><groupId>dev.usageplatform</groupId><artifactId>usage-postgres</artifactId><version>${project.version}</version></dependency>
+      <dependency><groupId>dev.usageplatform</groupId><artifactId>usage-messaging</artifactId><version>${project.version}</version></dependency>
+      <dependency><groupId>dev.usageplatform</groupId><artifactId>usage-spring-boot-starter</artifactId><version>${project.version}</version></dependency>
+    </dependencies>
+  </dependencyManagement>
+</project>
