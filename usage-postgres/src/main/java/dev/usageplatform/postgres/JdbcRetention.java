@@ -5,7 +5,8 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.time.Instant;
-import java.time.ZoneOffset;
+
+import static dev.usageplatform.postgres.Jdbc.utc;
 
 /**
  * Deletes the bookkeeping that only matters while an event can still arrive or be reversed: the dedup ids
@@ -47,7 +48,7 @@ public final class JdbcRetention {
         long total = 0;
         try (Connection c = dataSource.getConnection(); PreparedStatement ps = c.prepareStatement(tables.sql(sql))) {
             c.setAutoCommit(true); // each batch commits on its own
-            ps.setObject(1, cutoff.atOffset(ZoneOffset.UTC));
+            ps.setObject(1, utc(cutoff));
             int n;
             do {
                 n = ps.executeUpdate();

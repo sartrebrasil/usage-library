@@ -20,13 +20,14 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
+
+import static dev.usageplatform.postgres.Jdbc.utc;
 
 /**
  * Reads the tenant's current plan, applies overrides and builds the core {@link Policy}. The policy's anchor is
@@ -78,7 +79,7 @@ public final class JdbcPolicyStore implements PolicyStore {
     }
 
     private Optional<Policy> load(TenantId tenant) {
-        OffsetDateTime now = clock.instant().atOffset(ZoneOffset.UTC);
+        OffsetDateTime now = utc(clock.instant());
         try (Connection c = dataSource.getConnection(); PreparedStatement ps = c.prepareStatement(tables.sql(QUERY))) {
             ps.setObject(1, now);
             ps.setObject(2, now);

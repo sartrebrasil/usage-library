@@ -1,5 +1,6 @@
 package dev.usageplatform.demo.async;
 
+import dev.usageplatform.core.Decision;
 import dev.usageplatform.core.TenantId;
 import dev.usageplatform.core.UsageEngine;
 import org.springframework.http.HttpStatus;
@@ -45,7 +46,7 @@ class DocumentController {
                 .flatMap(decision -> {
                     // Only the quota refuses here. A full concurrency limit is not a reason to turn the document away:
                     // it just waits in the queue until a slot is free.
-                    if (!decision.allowed() && "quota_exceeded".equals(decision.reason())) {
+                    if (!decision.allowed() && Decision.QUOTA_EXCEEDED.equals(decision.reason())) {
                         return Mono.just(ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).<Map<String, Object>>body(Map.of("error", decision.reason())));
                     }
                     return Mono.fromCallable(() -> accept(tenant, content)).subscribeOn(Schedulers.boundedElastic());

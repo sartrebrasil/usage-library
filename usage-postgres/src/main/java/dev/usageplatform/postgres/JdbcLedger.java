@@ -13,7 +13,6 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -22,6 +21,9 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
+
+import static dev.usageplatform.postgres.Jdbc.inTransaction;
+import static dev.usageplatform.postgres.Jdbc.utc;
 
 /**
  * Ledger on PostgreSQL. One transaction per event: the insert is the dedup (ON CONFLICT DO NOTHING) and,
@@ -123,25 +125,14 @@ public final class JdbcLedger implements Ledger {
     @Override
     public CompletionStage<Boolean> record(UsageEvent e, List<Slot> slots) {
         List<Slot> ordered = slots.stream().sorted(LOCK_ORDER).toList();
-        return CompletableFuture.supplyAsync(() -> {
-            try (Connection c = dataSource.getConnection()) {
-                c.setAutoCommit(false);
-                try {
-                    boolean isNew = insertEvent(c, e);
-                    if (isNew && !ordered.isEmpty()) {
-                        insertSlots(c, e, ordered);
-                        addToSummaries(c, e, ordered);
-                    }
-                    c.commit();
-                    return isNew;
-                } catch (SQLException | RuntimeException ex) {
-                    rollbackQuietly(c, ex);
-                    throw ex;
-                }
-            } catch (SQLException ex) {
-                throw new IllegalStateException("ledger write failed", ex);
+        return CompletableFuture.supplyAsync(() -> inTransaction(dataSource, "ledger write failed", c -> {
+            boolean isNew = insertEvent(c, e);
+            if (isNew && !ordered.isEmpty()) {
+                insertSlots(c, e, ordered);
+                addToSummaries(c, e, ordered);
             }
-        }, executor);
+            return isNew;
+        }), executor);
     }
 
     @Override
@@ -162,29 +153,16 @@ public final class JdbcLedger implements Ledger {
 
     @Override
     public CompletionStage<Compensated> compensate(Compensation comp, UsageEvent original) {
-        return CompletableFuture.supplyAsync(() -> {
-            try (Connection c = dataSource.getConnection()) {
-                c.setAutoCommit(false);
-                try {
-                    Compensated result = applyCompensation(c, comp, original);
-                    if (result.result() == CompensationResult.APPLIED) c.commit();
-                    else c.rollback(); // DUPLICATE and ALREADY_COMPENSATED must leave no trace, not even the event row
-                    return result;
-                } catch (SQLException | RuntimeException ex) {
-                    rollbackQuietly(c, ex);
-                    throw ex;
-                }
-            } catch (SQLException ex) {
-                throw new IllegalStateException("compensation failed", ex);
-            }
-        }, executor);
+        // DUPLICATE and ALREADY_COMPENSATED must leave no trace, not even the event row: only APPLIED commits
+        return CompletableFuture.supplyAsync(() -> inTransaction(dataSource, "compensation failed",
+                c -> applyCompensation(c, comp, original), result -> result.result() == CompensationResult.APPLIED), executor);
     }
 
     private Compensated applyCompensation(Connection c, Compensation comp, UsageEvent original) throws SQLException {
         if (!claimId(c, comp.eventId())) return new Compensated(CompensationResult.DUPLICATE, List.of());
         try (PreparedStatement ps = c.prepareStatement(tables.sql(INSERT_COMPENSATION_EVENT))) {
             ps.setObject(1, comp.eventId());
-            ps.setObject(2, comp.occurredAt().atOffset(ZoneOffset.UTC));
+            ps.setObject(2, utc(comp.occurredAt()));
             ps.setString(3, comp.tenant().value());
             ps.setString(4, comp.metricCode());
             ps.setLong(5, comp.quantity());
@@ -205,7 +183,7 @@ public final class JdbcLedger implements Ledger {
                 ps.setString(3, original.tenant().value());
                 ps.setString(4, original.metricCode());
                 ps.setString(5, s.windowKey());
-                ps.setObject(6, s.period().start().atOffset(ZoneOffset.UTC));
+                ps.setObject(6, utc(s.period().start()));
                 ps.addBatch();
             }
             ps.executeBatch();
@@ -241,7 +219,7 @@ public final class JdbcLedger implements Ledger {
         if (!claimId(c, e.eventId())) return false;
         try (PreparedStatement ps = c.prepareStatement(tables.sql(INSERT_EVENT))) {
             ps.setObject(1, e.eventId());
-            ps.setObject(2, e.occurredAt().atOffset(ZoneOffset.UTC));
+            ps.setObject(2, utc(e.occurredAt()));
             ps.setString(3, e.tenant().value());
             ps.setString(4, e.metricCode());
             ps.setLong(5, e.quantity());
@@ -254,8 +232,8 @@ public final class JdbcLedger implements Ledger {
             for (Slot s : slots) {
                 ps.setObject(1, e.eventId());
                 ps.setString(2, s.windowKey());
-                ps.setObject(3, s.period().start().atOffset(ZoneOffset.UTC));
-                ps.setObject(4, s.period().end().atOffset(ZoneOffset.UTC));
+                ps.setObject(3, utc(s.period().start()));
+                ps.setObject(4, utc(s.period().end()));
                 ps.setString(5, s.plan().code());
                 ps.setInt(6, s.plan().version());
                 ps.addBatch();
@@ -270,23 +248,14 @@ public final class JdbcLedger implements Ledger {
                 ps.setString(1, e.tenant().value());
                 ps.setString(2, e.metricCode());
                 ps.setString(3, s.windowKey());
-                ps.setObject(4, s.period().start().atOffset(ZoneOffset.UTC));
-                ps.setObject(5, s.period().end().atOffset(ZoneOffset.UTC));
+                ps.setObject(4, utc(s.period().start()));
+                ps.setObject(5, utc(s.period().end()));
                 ps.setLong(6, e.quantity());
                 ps.setString(7, s.plan().code());
                 ps.setInt(8, s.plan().version());
                 ps.addBatch();
             }
             ps.executeBatch();
-        }
-    }
-
-    /** A failed rollback must not hide the error that caused it. */
-    private static void rollbackQuietly(Connection c, Exception cause) {
-        try {
-            c.rollback();
-        } catch (SQLException rollbackError) {
-            cause.addSuppressed(rollbackError);
         }
     }
 }

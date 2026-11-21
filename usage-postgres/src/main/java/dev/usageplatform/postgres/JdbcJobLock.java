@@ -13,6 +13,8 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
 import java.util.function.Supplier;
 
+import static dev.usageplatform.core.Stages.done;
+
 /**
  * JobLock on a PostgreSQL transaction-level advisory lock: one connection stays in an open transaction for
  * as long as the job runs and the lock vanishes with it, on commit, rollback, or when the process or the
@@ -39,7 +41,7 @@ public final class JdbcJobLock implements JobLock {
     @Override
     public <T> CompletionStage<Optional<T>> runIfAcquired(String name, Supplier<CompletionStage<T>> job) {
         return CompletableFuture.supplyAsync(() -> tryLock(name), executor).thenCompose(held -> {
-            if (held == null) return CompletableFuture.completedFuture(Optional.<T>empty());
+            if (held == null) return done(Optional.<T>empty());
             CompletableFuture<Optional<T>> out = new CompletableFuture<>();
             CompletionStage<T> running;
             try {

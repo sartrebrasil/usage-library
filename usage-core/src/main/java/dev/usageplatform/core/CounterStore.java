@@ -1,6 +1,7 @@
 package dev.usageplatform.core;
 
 import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
 /**
@@ -39,19 +40,19 @@ public interface CounterStore {
      * Required if you use CONCURRENCY limits; the counter methods above are not used for them.
      */
     default CompletionStage<Lease> acquireLease(String key, String holder, long weight, long cap, Duration lease) {
-        return java.util.concurrent.CompletableFuture.failedFuture(
+        return CompletableFuture.failedFuture(
                 new UnsupportedOperationException("this CounterStore has no per-holder leases"));
     }
 
     /** Frees the holder's slots. Idempotent: releasing twice, or after the lease expired, is a no-op. */
     default CompletionStage<Void> releaseLease(String key, String holder) {
-        return java.util.concurrent.CompletableFuture.failedFuture(
+        return CompletableFuture.failedFuture(
                 new UnsupportedOperationException("this CounterStore has no per-holder leases"));
     }
 
     /** Weight held by live (unexpired) holders. */
     default CompletionStage<Long> leasesInUse(String key) {
-        return java.util.concurrent.CompletableFuture.failedFuture(
+        return CompletableFuture.failedFuture(
                 new UnsupportedOperationException("this CounterStore has no per-holder leases"));
     }
 }

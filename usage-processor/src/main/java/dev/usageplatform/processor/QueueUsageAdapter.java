@@ -13,6 +13,9 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
+
+import static dev.usageplatform.core.Stages.done;
 
 /**
  * Processor side of a result metric (e.g. ITEMS_PROCESSED). Broker-agnostic: the host hands over the
@@ -69,6 +72,8 @@ public final class QueueUsageAdapter {
     /**
      * @param itemId stable business id of the item: the same item always yields the same usage eventId,
      *               so redelivery or retry can never be billed twice.
+     * @param work runs on the thread that completed the quota check or the slot acquisition, usually a Redis I/O thread:
+     *             move anything that blocks (CPU-heavy parsing, JDBC, HTTP) to your own executor, or Redis commands stall.
      * @return failed stage if the work or the persistence failed: the broker redelivers.
      */
     public <R> CompletionStage<Result> handle(Map<String, String> headers, String itemId,
@@ -122,16 +127,13 @@ public final class QueueUsageAdapter {
         Set<String> values = headers.entrySet().stream()
                 .filter(e -> e.getKey().equalsIgnoreCase(tenantHeader) && e.getValue() != null && !e.getValue().isBlank())
                 .map(Map.Entry::getValue)
-                .collect(java.util.stream.Collectors.toSet());
+                .collect(Collectors.toSet());
         // two different tenants in one message: processing it for either could bill the wrong one
         return values.size() == 1 ? Optional.of(new TenantId(values.iterator().next())) : Optional.empty();
     }
 
     private static Result refusal(Decision d) {
-        return new Result("no_policy".equals(d.reason()) ? Verdict.DENIED : Verdict.DEFERRED, d.reason());
+        return new Result(Decision.NO_POLICY.equals(d.reason()) ? Verdict.DENIED : Verdict.DEFERRED, d.reason());
     }
 
-    private static <T> CompletionStage<T> done(T value) {
-        return CompletableFuture.completedFuture(value);
-    }
 }

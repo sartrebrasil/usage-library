@@ -10,8 +10,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+
+import static dev.usageplatform.core.Stages.done;
 
 /** Single-JVM Ledger and SummaryStore for tests: dedup by eventId, summaries per slot, compensation. */
 public final class InMemoryLedger implements Ledger, SummaryStore {
@@ -51,7 +52,7 @@ public final class InMemoryLedger implements Ledger, SummaryStore {
 
     @Override
     public synchronized CompletionStage<Boolean> record(UsageEvent e, List<Slot> slots) {
-        if (!seen.add(e.eventId())) return CompletableFuture.completedFuture(false);
+        if (!seen.add(e.eventId())) return done(false);
         usage.put(e.eventId(), e);
         slotsOfEvent.put(e.eventId(), List.copyOf(slots));
         for (Slot s : slots) {
@@ -65,19 +66,19 @@ public final class InMemoryLedger implements Ledger, SummaryStore {
             }
             r.updated = clock.instant();
         }
-        return CompletableFuture.completedFuture(true);
+        return done(true);
     }
 
     @Override
     public synchronized CompletionStage<Optional<UsageEvent>> find(UUID eventId) {
-        return CompletableFuture.completedFuture(Optional.ofNullable(usage.get(eventId)));
+        return done(Optional.ofNullable(usage.get(eventId)));
     }
 
     @Override
     public synchronized CompletionStage<Compensated> compensate(Compensation c, UsageEvent original) {
-        if (seen.contains(c.eventId())) return CompletableFuture.completedFuture(new Compensated(CompensationResult.DUPLICATE, List.of()));
+        if (seen.contains(c.eventId())) return done(new Compensated(CompensationResult.DUPLICATE, List.of()));
         if (compensatedBy.containsKey(original.eventId())) {
-            return CompletableFuture.completedFuture(new Compensated(CompensationResult.ALREADY_COMPENSATED, List.of()));
+            return done(new Compensated(CompensationResult.ALREADY_COMPENSATED, List.of()));
         }
         seen.add(c.eventId());
         compensatedBy.put(original.eventId(), c.eventId());
@@ -89,12 +90,12 @@ public final class InMemoryLedger implements Ledger, SummaryStore {
             else r.total = Math.max(0, r.total - c.quantity());
             r.updated = clock.instant();
         }
-        return CompletableFuture.completedFuture(new Compensated(CompensationResult.APPLIED, slots));
+        return done(new Compensated(CompensationResult.APPLIED, slots));
     }
 
     @Override
     public synchronized CompletionStage<Optional<Summary>> find(TenantId tenant, String metricCode, String windowKey, Instant periodStart) {
-        return CompletableFuture.completedFuture(Optional.ofNullable(rows.get(key(tenant, metricCode, windowKey, periodStart)))
+        return done(Optional.ofNullable(rows.get(key(tenant, metricCode, windowKey, periodStart)))
                 .map(Row::toSummary));
     }
 
@@ -104,7 +105,7 @@ public final class InMemoryLedger implements Ledger, SummaryStore {
         for (Row r : rows.values()) {
             if (!r.closed && r.updated.isBefore(updatedBefore)) out.add(r.toSummary());
         }
-        return CompletableFuture.completedFuture(out);
+        return done(out);
     }
 
     @Override
@@ -116,7 +117,7 @@ public final class InMemoryLedger implements Ledger, SummaryStore {
                 n++;
             }
         }
-        return CompletableFuture.completedFuture(n);
+        return done(n);
     }
 
     private static String key(TenantId t, String metric, String windowKey, Instant start) {

@@ -48,6 +48,8 @@ class DocumentWorker {
     private final LinkedBlockingQueue<Job> queue = new LinkedBlockingQueue<>();
     private final ScheduledExecutorService later = Executors.newSingleThreadScheduledExecutor();
     private final ExecutorService workers = Executors.newFixedThreadPool(4);
+    // the adapter continues on the thread that completed its Redis call: blocking work must leave it, or it stalls every Redis command
+    private final ExecutorService blocking = Executors.newVirtualThreadPerTaskExecutor();
     private volatile boolean running = true;
 
     private final Duration processingTime;
@@ -70,6 +72,7 @@ class DocumentWorker {
         running = false;
         workers.shutdownNow();
         later.shutdownNow();
+        blocking.shutdownNow();
     }
 
     void submit(Job job) {
@@ -92,7 +95,7 @@ class DocumentWorker {
         QueueUsageAdapter.Result result;
         try {
             result = adapter.<String>handle(Map.of("x-tenant-id", job.tenant()), job.id().toString(),
-                    () -> process(job), (status, usage) -> save(job, status, usage)).toCompletableFuture().join();
+                    () -> CompletableFuture.supplyAsync(() -> process(job), blocking), (status, usage) -> save(job, status, usage)).toCompletableFuture().join();
         } catch (RuntimeException e) {
             fail(job, e);
             return;
@@ -112,7 +115,7 @@ class DocumentWorker {
     }
 
     /** The actual work. "reject..." ends REJECTED (a final status that is NOT billable), "boom..." throws, anything else COMPLETED. */
-    private CompletionStage<Done<String>> process(Job job) {
+    private Done<String> process(Job job) {
         try {
             Thread.sleep(processingTime.toMillis()); // pretend to parse, validate, call something
         } catch (InterruptedException e) {
@@ -121,7 +124,7 @@ class DocumentWorker {
         }
         if (job.content().startsWith("boom")) throw new IllegalStateException("processing failed");
         String status = job.content().startsWith("reject") ? "REJECTED" : "COMPLETED";
-        return CompletableFuture.completedFuture(new Done<>(status, status, Instant.now()));
+        return new Done<>(status, status, Instant.now());
     }
 
     /**

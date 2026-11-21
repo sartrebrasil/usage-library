@@ -5,9 +5,10 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
+
+import static dev.usageplatform.core.Stages.done;
 
 /** Single-JVM CounterStore for tests and local use. Not shared across instances. */
 public final class InMemoryCounterStore implements CounterStore {
@@ -37,7 +38,7 @@ public final class InMemoryCounterStore implements CounterStore {
             out[0] = new Result(true, next);
             return new Entry(next, now.plus(ttl));
         });
-        return CompletableFuture.completedFuture(out[0]);
+        return done(out[0]);
     }
 
     @Override
@@ -57,7 +58,7 @@ public final class InMemoryCounterStore implements CounterStore {
             }
             return slots;
         });
-        return CompletableFuture.completedFuture(out[0]);
+        return done(out[0]);
     }
 
     @Override
@@ -66,7 +67,7 @@ public final class InMemoryCounterStore implements CounterStore {
             slots.remove(holder);
             return slots.isEmpty() ? null : slots;
         });
-        return CompletableFuture.completedFuture(null);
+        return done(null);
     }
 
     @Override
@@ -78,12 +79,12 @@ public final class InMemoryCounterStore implements CounterStore {
             used[0] = slots.values().stream().filter(h -> h.expires().isAfter(now)).mapToLong(Held::weight).sum();
             return slots;
         });
-        return CompletableFuture.completedFuture(used[0]);
+        return done(used[0]);
     }
 
     @Override
     public CompletionStage<Long> get(String key) {
-        return CompletableFuture.completedFuture(live(map.get(key), clock.instant()));
+        return done(live(map.get(key), clock.instant()));
     }
 
     private static long live(Entry e, Instant now) {

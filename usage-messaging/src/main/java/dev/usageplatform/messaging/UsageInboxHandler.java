@@ -7,7 +7,9 @@ import dev.usageplatform.consumer.UsageEventConsumer;
 import dev.usageplatform.consumer.UsageEventConsumer.Outcome;
 
 import java.time.Duration;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 
 /**
@@ -62,7 +64,7 @@ public final class UsageInboxHandler<T> implements InboxResultHandler<T> {
         Outcome outcome;
         try {
             outcome = consumer.handle(message.message().payloadAsString()).toCompletableFuture().get(timeout.toMillis(), TimeUnit.MILLISECONDS);
-        } catch (java.util.concurrent.TimeoutException | java.util.concurrent.ExecutionException e) {
+        } catch (TimeoutException | ExecutionException e) {
             throw new RetryableUsageException("usage consumer did not answer", e);
         }
         try {

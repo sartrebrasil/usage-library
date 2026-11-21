@@ -17,6 +17,8 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
+import static dev.usageplatform.core.Stages.done;
+
 /**
  * The decision engine. Adapters (gateway filter, servlet filter, queue consumer) only translate
  * their world into these four calls:
@@ -41,9 +43,13 @@ public final class UsageEngine {
      */
     public enum Compensate { APPLIED, DUPLICATE, ORIGINAL_NOT_FOUND, ALREADY_COMPENSATED, INVALID, COUNTER_DRIFT }
 
+    /** Largest cost accepted by {@link #check} and {@link #acquire}. */
+    public static final long MAX_COST = UsageEvent.MAX_QUANTITY;
+
     private record Applied(String key, Duration ttl) {}
 
-    private static final Duration QUOTA_GRACE = Duration.ofDays(7);
+    private static final System.Logger LOG = System.getLogger(UsageEngine.class.getName());
+    static final Duration QUOTA_GRACE = Duration.ofDays(7);
 
     private final PolicyStore policies;
     private final CounterStore counters;
@@ -52,6 +58,7 @@ public final class UsageEngine {
     private final Clock clock;
     private final FailMode failMode;
     private final Duration lease;
+    private final UsageIngestion writes;
 
     /** @param lease how long a concurrency slot lives if its holder crashes without releasing it (each holder has its own). */
     public UsageEngine(PolicyStore policies, CounterStore counters, Ledger ledger, UsageSink sink,
@@ -63,6 +70,7 @@ public final class UsageEngine {
         this.clock = clock;
         this.failMode = failMode;
         this.lease = lease;
+        this.writes = new UsageIngestion(policies, counters, ledger);
     }
 
     // ---- check -------------------------------------------------------------------------------
@@ -81,10 +89,16 @@ public final class UsageEngine {
         return policies.policyFor(tenant)
                 .thenCompose(opt -> opt.isPresent()
                         ? evaluate(opt.get(), tenant, metricCode, cost, at)
-                        : done(Decision.deny("no_policy")))
-                .exceptionally(ex -> failMode == FailMode.OPEN
-                        ? Decision.allowDegraded("store_unavailable")
-                        : Decision.deny("store_unavailable"));
+                        : done(Decision.deny(Decision.NO_POLICY)))
+                .exceptionally(this::degraded);
+    }
+
+    /** A store that fails is not silent: fail-mode decides the answer, and the cause is logged (without a stack trace, it can repeat per request). */
+    private Decision degraded(Throwable ex) {
+        LOG.log(System.Logger.Level.WARNING, "usage store unavailable, fail-mode {0}: {1}", failMode, ex);
+        return failMode == FailMode.OPEN
+                ? Decision.allowDegraded(Decision.STORE_UNAVAILABLE)
+                : Decision.deny(Decision.STORE_UNAVAILABLE);
     }
 
     private CompletionStage<Decision> evaluate(Policy p, TenantId t, String metric, long cost, Instant at) {
@@ -154,13 +168,11 @@ public final class UsageEngine {
         requirePositive(cost);
         return policies.policyFor(tenant)
                 .thenCompose(opt -> acquireWith(opt, tenant, metricCode, cost))
-                .exceptionally(ex -> failMode == FailMode.OPEN
-                        ? permit(Decision.allowDegraded("store_unavailable"), () -> done(null))
-                        : permit(Decision.deny("store_unavailable"), () -> done(null)));
+                .exceptionally(ex -> permit(degraded(ex), () -> done(null)));
     }
 
     private CompletionStage<Permit> acquireWith(Optional<Policy> opt, TenantId t, String metric, long cost) {
-        if (opt.isEmpty()) return done(permit(Decision.deny("no_policy"), () -> done(null)));
+        if (opt.isEmpty()) return done(permit(Decision.deny(Decision.NO_POLICY), () -> done(null)));
         Policy p = opt.get();
         Optional<Limit> limit = p.limitsFor(metric).stream().filter(l -> l.type() == Type.CONCURRENCY).findFirst();
         if (limit.isEmpty()) return done(permit(Decision.allow().withPlan(p.plan()), () -> done(null)));
@@ -174,7 +186,7 @@ public final class UsageEngine {
                 .exceptionallyCompose(ex -> releaseQuietly(key, holder).thenCompose(v -> CompletableFuture.<CounterStore.Lease>failedFuture(ex)))
                 .thenApply(r -> r.granted()
                         ? permit(Decision.allow().withPlan(p.plan()), () -> counters.releaseLease(key, holder))
-                        : permit(Decision.deny("concurrency_exceeded").withPlan(p.plan()), () -> done(null)));
+                        : permit(Decision.deny(Decision.CONCURRENCY_EXCEEDED).withPlan(p.plan()), () -> done(null)));
     }
 
     private CompletionStage<Void> releaseQuietly(String key, String holder) {
@@ -219,7 +231,7 @@ public final class UsageEngine {
      * which keeps every event.
      */
     public CompletionStage<Ingest> ingest(UsageEvent e) {
-        return policies.policyFor(e.tenant()).thenCompose(opt -> recordAndCount(opt, e));
+        return writes.ingest(e);
     }
 
     /** Tell the platform to reverse a previous usage (after the business reversal is persisted, via the outbox). */
@@ -235,61 +247,7 @@ public final class UsageEngine {
      * Counters never go below zero.
      */
     public CompletionStage<Compensate> compensate(Compensation c) {
-        return ledger.find(c.compensates()).thenCompose(found -> found.isEmpty()
-                ? done(Compensate.ORIGINAL_NOT_FOUND)
-                : reverse(c, found.get()));
-    }
-
-    private CompletionStage<Compensate> reverse(Compensation c, UsageEvent original) {
-        boolean consistent = original.tenant().equals(c.tenant())
-                && original.metricCode().equals(c.metricCode())
-                && c.quantity() <= original.quantity();
-        if (!consistent) return done(Compensate.INVALID);
-        // the ledger reverses, and hands back, the slots the original was recorded in: the counters are lowered in
-        // exactly those, whatever the policy says today
-        return ledger.compensate(c, original).thenCompose(out -> switch (out.result()) {
-            case DUPLICATE -> done(Compensate.DUPLICATE);
-            case ALREADY_COMPENSATED -> done(Compensate.ALREADY_COMPENSATED);
-            case APPLIED -> lowerCounters(out.slots(), original, c.quantity())
-                    .handle((v, ex) -> ex == null ? Compensate.APPLIED : Compensate.COUNTER_DRIFT);
-        });
-    }
-
-    private CompletionStage<Void> lowerCounters(List<Ledger.Slot> slots, UsageEvent original, long quantity) {
-        CompletableFuture<?>[] subs = slots.stream()
-                .map(s -> counters.add(counterKey(Type.QUOTA, original.tenant(), original.metricCode(), s.windowKey(), s.period().start()),
-                        -quantity, Long.MAX_VALUE, Duration.between(s.period().start(), s.period().end()).plus(QUOTA_GRACE))
-                        .toCompletableFuture())
-                .toArray(CompletableFuture[]::new);
-        return CompletableFuture.allOf(subs);
-    }
-
-    private CompletionStage<Ingest> recordAndCount(Optional<Policy> policy, UsageEvent e) {
-        return ledger.record(e, slotsFor(policy, e)).thenCompose(isNew -> isNew
-                ? moveCounters(policy, e).handle((v, ex) -> ex == null ? Ingest.APPLIED : Ingest.COUNTER_DRIFT)
-                : done(Ingest.DUPLICATE));
-    }
-
-    private static List<Ledger.Slot> slotsFor(Optional<Policy> policy, UsageEvent e) {
-        if (policy.isEmpty()) return List.of();
-        Policy p = policy.get();
-        return p.limitsFor(e.metricCode()).stream()
-                .filter(l -> l.type() == Type.QUOTA)
-                .map(l -> new Ledger.Slot(PeriodCalculator.windowKey(l.window()),
-                        PeriodCalculator.periodOf(l.window(), p.anchor(), e.occurredAt()), p.plan()))
-                .distinct()
-                .toList();
-    }
-
-    private CompletionStage<Void> moveCounters(Optional<Policy> opt, UsageEvent e) {
-        if (opt.isEmpty()) return done(null);
-        Policy p = opt.get();
-        CompletableFuture<?>[] adds = p.limitsFor(e.metricCode()).stream()
-                .filter(l -> l.type() == Type.QUOTA && l.metric().mode() == Mode.REPORT_ONLY)
-                .map(l -> counters.add(key(e.tenant(), l, p.anchor(), e.occurredAt()), e.quantity(),
-                        Long.MAX_VALUE, ttl(l)).toCompletableFuture())
-                .toArray(CompletableFuture[]::new);
-        return CompletableFuture.allOf(adds);
+        return writes.compensate(c);
     }
 
     // ---- helpers -----------------------------------------------------------------------------
@@ -329,20 +287,14 @@ public final class UsageEngine {
 
     private static String reason(Limit l) {
         return switch (l.type()) {
-            case RATE -> "rate_limited";
-            case QUOTA -> "quota_exceeded";
-            case CONCURRENCY -> "concurrency_exceeded";
+            case RATE -> Decision.RATE_LIMITED;
+            case QUOTA -> Decision.QUOTA_EXCEEDED;
+            case CONCURRENCY -> Decision.CONCURRENCY_EXCEEDED;
         };
     }
-
-    /** Largest cost accepted by {@link #check} and {@link #acquire}. */
-    public static final long MAX_COST = UsageEvent.MAX_QUANTITY;
 
     private static void requirePositive(long cost) {
         if (cost <= 0 || cost > MAX_COST) throw new IllegalArgumentException("cost must be in 1.." + MAX_COST);
     }
 
-    private static <T> CompletionStage<T> done(T value) {
-        return CompletableFuture.completedFuture(value);
-    }
 }

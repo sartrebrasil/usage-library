@@ -43,20 +43,22 @@ class DemoData implements ApplicationRunner {
         jdbc.update("""
                 INSERT INTO usage.metric (id, code, unit, count_trigger) VALUES (gen_random_uuid(), 'ITEMS_PROCESSED', 'DOCUMENT', 'ON_FINAL_STATUS')
                 ON CONFLICT (code) DO NOTHING""");
-        plan("FREE", "Free", 3, 20, 5, 1);
-        plan("PRO", "Pro", 100, 1000, 1000, 4);
-        plan("TRIAL", "Trial", 100, 1000, 3, 1);
+        plan(new PlanSpec("FREE", "Free", 3, 20, 5, 1));
+        plan(new PlanSpec("PRO", "Pro", 100, 1000, 1000, 4));
+        plan(new PlanSpec("TRIAL", "Trial", 100, 1000, 3, 1));
         tenant("acme", "Acme (free)", "FREE");
         tenant("globex", "Globex (pro)", "PRO");
         tenant("initech", "Initech (trial)", "TRIAL");
     }
 
-    private void plan(String code, String name, long requestsPerMinute, long requestsPerDay, long documentsPerDay, long documentsAtOnce) {
-        jdbc.update("INSERT INTO usage.plan (id, code, name, version) VALUES (gen_random_uuid(), ?, ?, 1) ON CONFLICT (code, version) DO NOTHING", code, name);
-        limit(code, "API_REQUESTS", "RATE", requestsPerMinute, 60L);
-        limit(code, "API_REQUESTS", "QUOTA", requestsPerDay, 86400L);
-        limit(code, "ITEMS_PROCESSED", "QUOTA", documentsPerDay, 86400L);
-        limit(code, "ITEMS_PROCESSED", "CONCURRENCY", documentsAtOnce, null); // a concurrency limit has no window
+    private record PlanSpec(String code, String name, long requestsPerMinute, long requestsPerDay, long documentsPerDay, long documentsAtOnce) {}
+
+    private void plan(PlanSpec p) {
+        jdbc.update("INSERT INTO usage.plan (id, code, name, version) VALUES (gen_random_uuid(), ?, ?, 1) ON CONFLICT (code, version) DO NOTHING", p.code(), p.name());
+        limit(p.code(), "API_REQUESTS", "RATE", p.requestsPerMinute(), 60L);
+        limit(p.code(), "API_REQUESTS", "QUOTA", p.requestsPerDay(), 86400L);
+        limit(p.code(), "ITEMS_PROCESSED", "QUOTA", p.documentsPerDay(), 86400L);
+        limit(p.code(), "ITEMS_PROCESSED", "CONCURRENCY", p.documentsAtOnce(), null); // a concurrency limit has no window
     }
 
     private void limit(String plan, String metric, String type, long value, Long windowSeconds) {

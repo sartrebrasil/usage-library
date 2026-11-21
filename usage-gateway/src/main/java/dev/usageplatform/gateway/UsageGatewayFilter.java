@@ -200,8 +200,8 @@ public final class UsageGatewayFilter implements GlobalFilter, Ordered {
 
     private static HttpStatus statusFor(String reason) {
         return switch (reason) {
-            case "rate_limited", "quota_exceeded", "concurrency_exceeded" -> HttpStatus.TOO_MANY_REQUESTS;
-            case "no_policy" -> HttpStatus.FORBIDDEN;
+            case Decision.RATE_LIMITED, Decision.QUOTA_EXCEEDED, Decision.CONCURRENCY_EXCEEDED -> HttpStatus.TOO_MANY_REQUESTS;
+            case Decision.NO_POLICY -> HttpStatus.FORBIDDEN;
             default -> HttpStatus.SERVICE_UNAVAILABLE;
         };
     }

@@ -7,7 +7,9 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.time.Instant;
-import java.time.ZoneOffset;
+
+import static dev.usageplatform.postgres.Jdbc.inTransaction;
+import static dev.usageplatform.postgres.Jdbc.utc;
 
 /**
  * Admin operations on a tenant's subscription and plan. Blocking and transactional on purpose: these are rare
@@ -48,14 +50,15 @@ public final class JdbcSubscriptions {
 
     /** Starts a subscription whose billing cycle is anchored at {@code startsAt}, on the given plan. */
     public void subscribe(TenantId tenant, String planCode, int planVersion, Instant startsAt) {
-        inTransaction(c -> {
+        inTransaction(dataSource, "subscription change failed", c -> {
             try (PreparedStatement ps = c.prepareStatement(tables.sql(OPEN_SUBSCRIPTION))) {
                 ps.setString(1, tenant.value());
-                ps.setObject(2, startsAt.atOffset(ZoneOffset.UTC));
-                ps.setObject(3, startsAt.atOffset(ZoneOffset.UTC));
+                ps.setObject(2, utc(startsAt));
+                ps.setObject(3, utc(startsAt));
                 ps.executeUpdate(); // a second open subscription violates the unique index
             }
             openPlan(c, tenant, planCode, planVersion, startsAt);
+            return null;
         });
     }
 
@@ -65,44 +68,26 @@ public final class JdbcSubscriptions {
      * Fails, changing nothing, if there is no plan in force that started before {@code at} or the new plan is unknown.
      */
     public void changePlan(TenantId tenant, String planCode, int planVersion, Instant at) {
-        inTransaction(c -> {
+        inTransaction(dataSource, "subscription change failed", c -> {
             try (PreparedStatement ps = c.prepareStatement(tables.sql(CLOSE_PLAN))) {
-                ps.setObject(1, at.atOffset(ZoneOffset.UTC));
+                ps.setObject(1, utc(at));
                 ps.setString(2, tenant.value());
-                ps.setObject(3, at.atOffset(ZoneOffset.UTC));
+                ps.setObject(3, utc(at));
                 if (ps.executeUpdate() == 0) throw new IllegalStateException("no plan in force that started before " + at);
             }
             openPlan(c, tenant, planCode, planVersion, at);
+            return null;
         });
     }
 
     private void openPlan(Connection c, TenantId tenant, String planCode, int planVersion, Instant from) throws SQLException {
         try (PreparedStatement ps = c.prepareStatement(tables.sql(OPEN_PLAN))) {
             ps.setString(1, tenant.value());
-            ps.setObject(2, from.atOffset(ZoneOffset.UTC));
+            ps.setObject(2, utc(from));
             ps.setString(3, tenant.value());
             ps.setString(4, planCode);
             ps.setInt(5, planVersion);
             if (ps.executeUpdate() == 0) throw new IllegalArgumentException("unknown plan " + planCode + " v" + planVersion + " or no open subscription");
-        }
-    }
-
-    private interface Work {
-        void run(Connection c) throws SQLException;
-    }
-
-    private void inTransaction(Work work) {
-        try (Connection c = dataSource.getConnection()) {
-            c.setAutoCommit(false);
-            try {
-                work.run(c);
-                c.commit();
-            } catch (SQLException | RuntimeException ex) {
-                c.rollback();
-                throw ex;
-            }
-        } catch (SQLException ex) {
-            throw new IllegalStateException("subscription change failed", ex);
         }
     }
 }

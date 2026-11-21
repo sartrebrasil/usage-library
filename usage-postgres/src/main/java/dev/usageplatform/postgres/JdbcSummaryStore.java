@@ -12,13 +12,14 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
+
+import static dev.usageplatform.postgres.Jdbc.utc;
 
 /**
  * Reads and closes usage_summary rows. Run {@link #closeEndedBefore} from a scheduled job on a single
@@ -68,7 +69,7 @@ public final class JdbcSummaryStore implements SummaryStore {
                 ps.setString(1, tenant.value());
                 ps.setString(2, metricCode);
                 ps.setString(3, windowKey);
-                ps.setObject(4, periodStart.atOffset(ZoneOffset.UTC));
+                ps.setObject(4, utc(periodStart));
                 try (ResultSet rs = ps.executeQuery()) {
                     if (!rs.next()) return Optional.<Summary>empty();
                     Period period = new Period(rs.getObject("period_start", OffsetDateTime.class).toInstant(),
@@ -87,7 +88,7 @@ public final class JdbcSummaryStore implements SummaryStore {
     public CompletionStage<List<Summary>> openSettledBefore(Instant updatedBefore) {
         return CompletableFuture.supplyAsync(() -> {
             try (Connection c = dataSource.getConnection(); PreparedStatement ps = c.prepareStatement(tables.sql(OPEN_SETTLED))) {
-                ps.setObject(1, updatedBefore.atOffset(ZoneOffset.UTC));
+                ps.setObject(1, utc(updatedBefore));
                 try (ResultSet rs = ps.executeQuery()) {
                     List<Summary> out = new ArrayList<>();
                     while (rs.next()) {
@@ -110,7 +111,7 @@ public final class JdbcSummaryStore implements SummaryStore {
     public CompletionStage<Integer> closeEndedBefore(Instant cutoff) {
         return CompletableFuture.supplyAsync(() -> {
             try (Connection c = dataSource.getConnection(); PreparedStatement ps = c.prepareStatement(tables.sql(CLOSE))) {
-                ps.setObject(1, cutoff.atOffset(ZoneOffset.UTC));
+                ps.setObject(1, utc(cutoff));
                 return ps.executeUpdate();
             } catch (SQLException ex) {
                 throw new IllegalStateException("summary close failed", ex);

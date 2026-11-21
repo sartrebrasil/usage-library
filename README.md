@@ -328,7 +328,7 @@ suba as duas bibliotecas para um repositório de artefatos e aponte o build para
 
 | Propriedade | Padrão | Descrição |
 |---|---|---|
-| `usage.fail-mode` | `OPEN` | Comportamento se os stores falharem |
+| `usage.fail-mode` | `OPEN` | Comportamento se os stores falharem; cada decisão degradada é registrada em WARNING (`dev.usageplatform.core.UsageEngine`), sem stack trace |
 | `usage.concurrency-lease` | `15m` | Vida de cada slot de concorrência, contada por dono |
 | `usage.policy-cache-ttl` | `1m` | Cache da política por tenant |
 | `usage.counters.type` | `redis` | `memory` só para uma instância |

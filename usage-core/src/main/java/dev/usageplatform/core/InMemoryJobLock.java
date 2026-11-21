@@ -7,6 +7,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.function.Supplier;
 
+import static dev.usageplatform.core.Stages.done;
+
 /** Single-JVM JobLock for tests and single-instance deployments: it excludes only callers in this process. */
 public final class InMemoryJobLock implements JobLock {
     private final Set<String> held = new HashSet<>();
@@ -14,7 +16,7 @@ public final class InMemoryJobLock implements JobLock {
     @Override
     public <T> CompletionStage<Optional<T>> runIfAcquired(String name, Supplier<CompletionStage<T>> job) {
         synchronized (held) {
-            if (!held.add(name)) return CompletableFuture.completedFuture(Optional.empty());
+            if (!held.add(name)) return done(Optional.empty());
         }
         CompletableFuture<Optional<T>> out = new CompletableFuture<>();
         CompletionStage<T> running;

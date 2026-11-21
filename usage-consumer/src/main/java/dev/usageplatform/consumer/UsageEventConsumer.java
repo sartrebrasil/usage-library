@@ -4,15 +4,15 @@ import dev.usageplatform.consumer.UsageEventJson.InvalidEventException;
 import dev.usageplatform.core.UsageEngine;
 import dev.usageplatform.core.UsageEngine.Compensate;
 import dev.usageplatform.core.UsageEngine.Ingest;
-import dev.usageplatform.core.UsageEvent;
 
 import java.sql.SQLException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.function.Predicate;
+
+import static dev.usageplatform.core.Stages.done;
 
 /**
  * The central consumer, broker-agnostic: the host passes each message body and acts on the outcome
@@ -35,7 +35,10 @@ public final class UsageEventConsumer {
         DEAD_LETTER
     }
 
-    /** reason is a short stable code the host should use as a metric tag. "counter_drift" is an ACK that needs reconciliation. */
+    /** The reason of an ACK whose ledger write succeeded but whose counters did not move: reconciliation repairs it. */
+    public static final String COUNTER_DRIFT_REASON = "counter_drift";
+
+    /** reason is a short stable code the host should use as a metric tag; {@link #COUNTER_DRIFT_REASON} is an ACK that needs reconciliation. */
     public record Outcome(Disposition disposition, String reason) {}
 
     private final UsageEngine engine;
@@ -99,7 +102,7 @@ public final class UsageEventConsumer {
         return switch (result) {
             case APPLIED -> new Outcome(Disposition.ACK, "applied");
             case DUPLICATE -> new Outcome(Disposition.ACK, "duplicate");
-            case COUNTER_DRIFT -> new Outcome(Disposition.ACK, "counter_drift");
+            case COUNTER_DRIFT -> new Outcome(Disposition.ACK, COUNTER_DRIFT_REASON);
         };
     }
 
@@ -107,7 +110,7 @@ public final class UsageEventConsumer {
         return switch (result) {
             case APPLIED -> new Outcome(Disposition.ACK, "compensated");
             case DUPLICATE -> new Outcome(Disposition.ACK, "duplicate");
-            case COUNTER_DRIFT -> new Outcome(Disposition.ACK, "counter_drift");
+            case COUNTER_DRIFT -> new Outcome(Disposition.ACK, COUNTER_DRIFT_REASON);
             // the usage it reverses has not arrived yet: hold the message and redeliver (the broker's retry limit decides when to give up)
             case ORIGINAL_NOT_FOUND -> new Outcome(Disposition.RETRY, "original_not_found");
             case ALREADY_COMPENSATED -> dead("already_compensated");
@@ -119,7 +122,4 @@ public final class UsageEventConsumer {
         return new Outcome(Disposition.DEAD_LETTER, reason);
     }
 
-    private static <T> CompletionStage<T> done(T value) {
-        return CompletableFuture.completedFuture(value);
-    }
 }

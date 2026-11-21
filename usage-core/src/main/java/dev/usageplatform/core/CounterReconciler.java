@@ -5,10 +5,10 @@ import dev.usageplatform.core.Metric.Mode;
 
 import java.time.Clock;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+
+import static dev.usageplatform.core.Stages.done;
 
 /**
  * Repairs the quota counters (a cache) from usage_summary (the truth). Run it from a scheduled job on a
@@ -95,7 +95,4 @@ public final class CounterReconciler {
         };
     }
 
-    private static <T> CompletionStage<T> done(T value) {
-        return CompletableFuture.completedFuture(value);
-    }
 }
