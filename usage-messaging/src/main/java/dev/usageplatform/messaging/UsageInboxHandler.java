@@ -74,7 +74,7 @@ public final class UsageInboxHandler<T> implements InboxResultHandler<T> {
         return switch (outcome.disposition()) {
             case ACK -> HandlerResult.ack();
             case RETRY -> {
-                if ("original_not_found".equals(outcome.reason())) yield HandlerResult.retryAfter(originalNotFoundDelay);
+                if (UsageEventConsumer.ORIGINAL_NOT_FOUND_REASON.equals(outcome.reason())) yield HandlerResult.retryAfter(originalNotFoundDelay);
                 throw new RetryableUsageException(outcome.reason(), null);
             }
             case DEAD_LETTER -> HandlerResult.reject(outcome.reason());

@@ -35,8 +35,21 @@ public final class UsageEventConsumer {
         DEAD_LETTER
     }
 
-    /** The reason of an ACK whose ledger write succeeded but whose counters did not move: reconciliation repairs it. */
+    /** The reasons an {@link Outcome} carries: stable codes, safe to use as metric tags. */
+    public static final String APPLIED_REASON = "applied";
+    public static final String DUPLICATE_REASON = "duplicate";
+    public static final String COMPENSATED_REASON = "compensated";
+    /** An ACK whose ledger write succeeded but whose counters did not move: reconciliation repairs it. */
     public static final String COUNTER_DRIFT_REASON = "counter_drift";
+    /** A RETRY: the compensation arrived before the usage it reverses. */
+    public static final String ORIGINAL_NOT_FOUND_REASON = "original_not_found";
+    public static final String UNKNOWN_METRIC_REASON = "unknown_metric";
+    public static final String OUT_OF_RANGE_REASON = "occurred_at_out_of_range";
+    public static final String ALREADY_COMPENSATED_REASON = "already_compensated";
+    public static final String INVALID_COMPENSATION_REASON = "invalid_compensation";
+    public static final String REJECTED_BY_DATABASE_REASON = "rejected_by_database";
+    /** A RETRY: the ledger or the policy store failed before anything was recorded. */
+    public static final String LEDGER_UNAVAILABLE_REASON = "ledger_unavailable";
 
     /** reason is a short stable code the host should use as a metric tag; {@link #COUNTER_DRIFT_REASON} is an ACK that needs reconciliation. */
     public record Outcome(Disposition disposition, String reason) {}
@@ -71,10 +84,10 @@ public final class UsageEventConsumer {
                 : ((UsageEventJson.Parsed.Reversal) parsed).compensation().metricCode();
         Instant at = parsed instanceof UsageEventJson.Parsed.Usage u ? u.event().occurredAt()
                 : ((UsageEventJson.Parsed.Reversal) parsed).compensation().occurredAt();
-        if (!knownMetric.test(metric)) return done(dead("unknown_metric"));
+        if (!knownMetric.test(metric)) return done(dead(UNKNOWN_METRIC_REASON));
         Instant now = clock.instant();
         if (at.isAfter(now.plus(maxFuture)) || at.isBefore(now.minus(maxPast))) {
-            return done(dead("occurred_at_out_of_range"));
+            return done(dead(OUT_OF_RANGE_REASON));
         }
         CompletionStage<Outcome> outcome = parsed instanceof UsageEventJson.Parsed.Usage u
                 ? engine.ingest(u.event()).thenApply(UsageEventConsumer::outcomeFor)
@@ -92,29 +105,29 @@ public final class UsageEventConsumer {
         for (Throwable t = error; t != null && depth < 10; t = t.getCause(), depth++) {
             if (t instanceof SQLException sql && sql.getSQLState() != null
                     && (sql.getSQLState().startsWith("22") || sql.getSQLState().startsWith("23"))) {
-                return dead("rejected_by_database");
+                return dead(REJECTED_BY_DATABASE_REASON);
             }
         }
-        return new Outcome(Disposition.RETRY, "ledger_unavailable");
+        return new Outcome(Disposition.RETRY, LEDGER_UNAVAILABLE_REASON);
     }
 
     private static Outcome outcomeFor(Ingest result) {
         return switch (result) {
-            case APPLIED -> new Outcome(Disposition.ACK, "applied");
-            case DUPLICATE -> new Outcome(Disposition.ACK, "duplicate");
+            case APPLIED -> new Outcome(Disposition.ACK, APPLIED_REASON);
+            case DUPLICATE -> new Outcome(Disposition.ACK, DUPLICATE_REASON);
             case COUNTER_DRIFT -> new Outcome(Disposition.ACK, COUNTER_DRIFT_REASON);
         };
     }
 
     private static Outcome outcomeFor(Compensate result) {
         return switch (result) {
-            case APPLIED -> new Outcome(Disposition.ACK, "compensated");
-            case DUPLICATE -> new Outcome(Disposition.ACK, "duplicate");
+            case APPLIED -> new Outcome(Disposition.ACK, COMPENSATED_REASON);
+            case DUPLICATE -> new Outcome(Disposition.ACK, DUPLICATE_REASON);
             case COUNTER_DRIFT -> new Outcome(Disposition.ACK, COUNTER_DRIFT_REASON);
             // the usage it reverses has not arrived yet: hold the message and redeliver (the broker's retry limit decides when to give up)
-            case ORIGINAL_NOT_FOUND -> new Outcome(Disposition.RETRY, "original_not_found");
-            case ALREADY_COMPENSATED -> dead("already_compensated");
-            case INVALID -> dead("invalid_compensation");
+            case ORIGINAL_NOT_FOUND -> new Outcome(Disposition.RETRY, ORIGINAL_NOT_FOUND_REASON);
+            case ALREADY_COMPENSATED -> dead(ALREADY_COMPENSATED_REASON);
+            case INVALID -> dead(INVALID_COMPENSATION_REASON);
         };
     }
 

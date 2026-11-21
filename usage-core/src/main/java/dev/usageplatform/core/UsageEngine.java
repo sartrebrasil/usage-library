@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
@@ -95,10 +96,13 @@ public final class UsageEngine {
 
     /** A store that fails is not silent: fail-mode decides the answer, and the cause is logged (without a stack trace, it can repeat per request). */
     private Decision degraded(Throwable ex) {
-        LOG.log(System.Logger.Level.WARNING, "usage store unavailable, fail-mode {0}: {1}", failMode, ex);
-        return failMode == FailMode.OPEN
-                ? Decision.allowDegraded(Decision.STORE_UNAVAILABLE)
-                : Decision.deny(Decision.STORE_UNAVAILABLE);
+        Throwable cause = ex instanceof CompletionException && ex.getCause() != null ? ex.getCause() : ex;
+        // a policy that cannot even be built (an invalid limit) is a configuration bug, not an outage: say so, loudly, with the stack
+        boolean invalidPolicy = cause instanceof IllegalArgumentException;
+        String reason = invalidPolicy ? Decision.INVALID_POLICY : Decision.STORE_UNAVAILABLE;
+        if (invalidPolicy) LOG.log(System.Logger.Level.ERROR, "usage policy is invalid, fail-mode " + failMode, cause);
+        else LOG.log(System.Logger.Level.WARNING, "usage store unavailable, fail-mode {0}: {1}", failMode, cause);
+        return failMode == FailMode.OPEN ? Decision.allowDegraded(reason) : Decision.deny(reason);
     }
 
     private CompletionStage<Decision> evaluate(Policy p, TenantId t, String metric, long cost, Instant at) {
@@ -270,7 +274,12 @@ public final class UsageEngine {
     }
 
     static Duration quotaTtl(Window window) {
-        return PeriodCalculator.maxLength(window).plus(QUOTA_GRACE);
+        return quotaTtl(PeriodCalculator.maxLength(window));
+    }
+
+    /** A quota counter outlives its period by {@link #QUOTA_GRACE}, so late events and compensations still find it. */
+    static Duration quotaTtl(Duration periodLength) {
+        return periodLength.plus(QUOTA_GRACE);
     }
 
     private Duration ttl(Limit l) {

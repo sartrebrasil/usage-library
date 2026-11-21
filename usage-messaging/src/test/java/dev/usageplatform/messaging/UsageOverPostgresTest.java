@@ -124,7 +124,7 @@ class UsageOverPostgresTest {
 
     @Test
     void aRollbackTakesTheResultAndItsUsageEventTogether() throws Exception {
-        var adapter = new QueueUsageAdapter(engine, "ITEMS_PROCESSED", Set.of("COMPLETED"), false, "x-tenant-id");
+        var adapter = new QueueUsageAdapter(engine, "ITEMS_PROCESSED", Set.of("COMPLETED"), false, "x-tenant-id", Runnable::run);
         Map<String, String> headers = Map.of("x-tenant-id", "acme");
 
         var failed = adapter.<String>handle(headers, "doc-1", () -> finished("doc-1"), persist(true)).toCompletableFuture();

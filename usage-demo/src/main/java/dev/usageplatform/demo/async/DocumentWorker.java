@@ -18,12 +18,15 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.ExecutorService;
+
+import static dev.usageplatform.core.Stages.done;
 
 /**
  * The processor. An in-memory queue stands in for your broker (RabbitMQ, SQS...): in production the same
@@ -48,8 +51,6 @@ class DocumentWorker {
     private final LinkedBlockingQueue<Job> queue = new LinkedBlockingQueue<>();
     private final ScheduledExecutorService later = Executors.newSingleThreadScheduledExecutor();
     private final ExecutorService workers = Executors.newFixedThreadPool(4);
-    // the adapter continues on the thread that completed its Redis call: blocking work must leave it, or it stalls every Redis command
-    private final ExecutorService blocking = Executors.newVirtualThreadPerTaskExecutor();
     private volatile boolean running = true;
 
     private final Duration processingTime;
@@ -72,7 +73,6 @@ class DocumentWorker {
         running = false;
         workers.shutdownNow();
         later.shutdownNow();
-        blocking.shutdownNow();
     }
 
     void submit(Job job) {
@@ -95,9 +95,9 @@ class DocumentWorker {
         QueueUsageAdapter.Result result;
         try {
             result = adapter.<String>handle(Map.of("x-tenant-id", job.tenant()), job.id().toString(),
-                    () -> CompletableFuture.supplyAsync(() -> process(job), blocking), (status, usage) -> save(job, status, usage)).toCompletableFuture().join();
+                    () -> done(process(job)), (status, usage) -> save(job, status, usage)).toCompletableFuture().join();
         } catch (RuntimeException e) {
-            fail(job, e);
+            fail(job, e instanceof CompletionException && e.getCause() != null ? e.getCause() : e); // the adapter wraps what the work threw
             return;
         }
         switch (result.verdict()) {
@@ -133,7 +133,7 @@ class DocumentWorker {
      */
     private CompletionStage<Void> save(Job job, String status, Optional<UsageEvent> usage) {
         jdbc.update("UPDATE documents SET status = ?, deliveries = deliveries + 1, processed_at = now() WHERE id = ?", status, job.id());
-        return usage.map(sink::publish).orElseGet(() -> CompletableFuture.completedFuture(null));
+        return usage.map(sink::publish).orElseGet(() -> done(null));
     }
 
     private int deliveries(Job job) {
@@ -141,7 +141,7 @@ class DocumentWorker {
         return n == null ? 0 : n;
     }
 
-    private void fail(Job job, RuntimeException e) {
+    private void fail(Job job, Throwable e) {
         if (job.failures() + 1 >= MAX_FAILURES) {
             log.warn("document {} failed for good: {}", job.id(), e.getMessage());
             jdbc.update("UPDATE documents SET status = 'FAILED' WHERE id = ?", job.id());

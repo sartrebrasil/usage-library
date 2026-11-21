@@ -55,7 +55,7 @@ final class UsageIngestion {
     private CompletionStage<Void> lowerCounters(List<Ledger.Slot> slots, UsageEvent original, long quantity) {
         CompletableFuture<?>[] subs = slots.stream()
                 .map(s -> counters.add(UsageEngine.counterKey(Type.QUOTA, original.tenant(), original.metricCode(), s.windowKey(), s.period().start()),
-                        -quantity, Long.MAX_VALUE, Duration.between(s.period().start(), s.period().end()).plus(UsageEngine.QUOTA_GRACE))
+                        -quantity, Long.MAX_VALUE, UsageEngine.quotaTtl(Duration.between(s.period().start(), s.period().end())))
                         .toCompletableFuture())
                 .toArray(CompletableFuture[]::new);
         return CompletableFuture.allOf(subs);

@@ -263,6 +263,21 @@ class UsageEngineTest {
     }
 
     @Test
+    void aPolicyThatCannotBeBuiltIsReportedAsInvalidNotAsAnOutage() {
+        // JdbcPolicyStore fails the load with IllegalArgumentException when a limit is invalid
+        PolicyStore invalid = t -> CompletableFuture.failedFuture(new IllegalArgumentException("RATE applies to access metrics only"));
+        var open = new UsageEngine(invalid, counters, ledger, x -> done(null), clock, FailMode.OPEN, Duration.ofMinutes(15));
+        Decision allowed = join(open.check(T, "API_REQUESTS", 1));
+        assertTrue(allowed.allowed());
+        assertEquals(Decision.INVALID_POLICY, allowed.reason());
+        var closed = new UsageEngine(invalid, counters, ledger, x -> done(null), clock, FailMode.CLOSED, Duration.ofMinutes(15));
+        Decision denied = join(closed.check(T, "API_REQUESTS", 1));
+        assertFalse(denied.allowed());
+        assertEquals(Decision.INVALID_POLICY, denied.reason());
+        assertEquals(Decision.INVALID_POLICY, join(open.acquire(T, "ITEMS_PROCESSED", 1)).decision().reason());
+    }
+
+    @Test
     void policyOutageRecordsNothingSoRedeliveryIsNotTreatedAsDuplicate() {
         PolicyStore down = t -> CompletableFuture.failedFuture(new IllegalStateException("db down"));
         var failing = new UsageEngine(down, counters, ledger, x -> done(null), clock, FailMode.OPEN, Duration.ofMinutes(15));

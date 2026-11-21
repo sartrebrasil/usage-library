@@ -8,10 +8,12 @@ import dev.usageplatform.core.UsageEvent;
 
 import java.time.Instant;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.Executor;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -59,21 +61,24 @@ public final class QueueUsageAdapter {
     private final Set<String> countableStatuses;
     private final boolean deferWhenOverQuota;
     private final String tenantHeader;
+    private final Executor executor;
 
+    /** @param executor runs the caller's {@code work} and {@code persist}, so their blocking calls never run on the Redis I/O thread the engine completes on. */
     public QueueUsageAdapter(UsageEngine engine, String metricCode, Set<String> countableStatuses,
-                             boolean deferWhenOverQuota, String tenantHeader) {
+                             boolean deferWhenOverQuota, String tenantHeader, Executor executor) {
         this.engine = engine;
         this.metricCode = metricCode;
         this.countableStatuses = Set.copyOf(countableStatuses);
         this.deferWhenOverQuota = deferWhenOverQuota;
         this.tenantHeader = tenantHeader;
+        this.executor = Objects.requireNonNull(executor, "executor");
     }
 
     /**
      * @param itemId stable business id of the item: the same item always yields the same usage eventId,
      *               so redelivery or retry can never be billed twice.
-     * @param work runs on the thread that completed the quota check or the slot acquisition, usually a Redis I/O thread:
-     *             move anything that blocks (CPU-heavy parsing, JDBC, HTTP) to your own executor, or Redis commands stall.
+     * @param work runs on the adapter's executor, so it may block (parsing, JDBC, HTTP)
+     * @param persist runs on the same executor once the work is done
      * @return failed stage if the work or the persistence failed: the broker redelivers.
      */
     public <R> CompletionStage<Result> handle(Map<String, String> headers, String itemId,
@@ -103,9 +108,10 @@ public final class QueueUsageAdapter {
                                                       Supplier<CompletionStage<Done<R>>> work, Persist<R> persist) {
         CompletionStage<Result> run;
         try {
-            run = work.get().thenCompose(d -> persist.persist(d.result(), usageFor(t, itemId, d))
-                    .thenApply(v -> new Result(Verdict.COMPLETED, d.status())));
-        } catch (RuntimeException e) {
+            run = CompletableFuture.supplyAsync(work::get, executor).thenCompose(stage -> stage)
+                    .thenComposeAsync(d -> persist.persist(d.result(), usageFor(t, itemId, d))
+                            .thenApply(v -> new Result(Verdict.COMPLETED, d.status())), executor);
+        } catch (RuntimeException e) { // the executor refused the task
             run = CompletableFuture.failedFuture(e);
         }
         CompletableFuture<Result> out = new CompletableFuture<>();

@@ -420,7 +420,7 @@ schema, eles usam o `search_path` como antes, **mas então o Flyway migra o sche
 
 ```bash
 cd usage-platform
-mvn test            # 233 testes; Redis e PostgreSQL reais em contêineres
+mvn test            # 234 testes; Redis e PostgreSQL reais em contêineres
 mvn install         # instala os módulos no repositório local
 ```
 

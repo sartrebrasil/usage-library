@@ -14,6 +14,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
+import static dev.usageplatform.core.Stages.done;
+
 /**
  * The two things a host application must supply to the gateway starter: who the caller is, and where usage goes.
  */
@@ -25,7 +27,7 @@ class DemoConfiguration {
 
     @Bean
     TenantResolver<ServerWebExchange> tenantResolver() {
-        return exchange -> CompletableFuture.completedFuture(Optional
+        return exchange -> done(Optional
                 .ofNullable(exchange.getRequest().getHeaders().getFirst("X-Api-Key"))
                 .map(TENANT_BY_API_KEY::get)
                 .map(TenantId::new));

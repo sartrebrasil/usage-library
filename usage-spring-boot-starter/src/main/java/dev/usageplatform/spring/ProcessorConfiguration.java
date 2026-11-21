@@ -2,6 +2,7 @@ package dev.usageplatform.spring;
 
 import dev.usageplatform.core.UsageEngine;
 import dev.usageplatform.processor.QueueUsageAdapter;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -10,6 +11,9 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.util.Assert;
 
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+
+import static dev.usageplatform.spring.UsageAutoConfiguration.EXECUTOR;
 
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnClass(QueueUsageAdapter.class)
@@ -18,9 +22,9 @@ class ProcessorConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    QueueUsageAdapter queueUsageAdapter(UsageEngine engine, UsageProperties props) {
+    QueueUsageAdapter queueUsageAdapter(UsageEngine engine, UsageProperties props, @Qualifier(EXECUTOR) ExecutorService executor) {
         UsageProperties.Processor p = props.processor();
         Assert.notEmpty(p.countableStatuses(), "usage.processor.countable-statuses must list the final statuses that are billable");
-        return new QueueUsageAdapter(engine, p.metric(), Set.copyOf(p.countableStatuses()), p.deferWhenOverQuota(), p.tenantHeader());
+        return new QueueUsageAdapter(engine, p.metric(), Set.copyOf(p.countableStatuses()), p.deferWhenOverQuota(), p.tenantHeader(), executor);
     }
 }

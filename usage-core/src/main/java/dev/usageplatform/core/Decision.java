@@ -5,6 +5,8 @@ public record Decision(boolean allowed, boolean overage, String reason, Plan pla
     /** The reasons a decision carries; stable codes, safe to use as metric tags. */
     public static final String NO_POLICY = "no_policy";
     public static final String STORE_UNAVAILABLE = "store_unavailable";
+    /** The policy could not be built (an invalid limit): a configuration error, answered by fail-mode like an outage. */
+    public static final String INVALID_POLICY = "invalid_policy";
     public static final String RATE_LIMITED = "rate_limited";
     public static final String QUOTA_EXCEEDED = "quota_exceeded";
     public static final String CONCURRENCY_EXCEEDED = "concurrency_exceeded";

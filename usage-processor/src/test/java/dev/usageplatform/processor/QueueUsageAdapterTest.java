@@ -59,7 +59,7 @@ class QueueUsageAdapterTest {
     }
 
     QueueUsageAdapter adapter(boolean deferWhenOver) {
-        return new QueueUsageAdapter(engine, "ITEMS_PROCESSED", Set.of("COMPLETED", "APPROVED"), deferWhenOver, "x-tenant-id");
+        return new QueueUsageAdapter(engine, "ITEMS_PROCESSED", Set.of("COMPLETED", "APPROVED"), deferWhenOver, "x-tenant-id", Runnable::run);
     }
 
     static CompletionStage<Done<String>> finished(String status) {
