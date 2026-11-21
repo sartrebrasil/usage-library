@@ -2,6 +2,7 @@ package dev.usageplatform.postgres;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -16,8 +17,21 @@ final class Jdbc {
         T run(Connection c) throws SQLException;
     }
 
+    interface Query<T> {
+        T run(PreparedStatement ps) throws SQLException;
+    }
+
     static OffsetDateTime utc(Instant instant) {
         return instant.atOffset(ZoneOffset.UTC);
+    }
+
+    /** Runs one statement on its own connection (a read, or a single autocommitted update); an SQLException becomes IllegalStateException(failure). */
+    static <T> T query(DataSource dataSource, String sql, String failure, Query<T> work) {
+        try (Connection c = dataSource.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+            return work.run(ps);
+        } catch (SQLException ex) {
+            throw new IllegalStateException(failure, ex);
+        }
     }
 
     /** Commits when the work returns. A failure rolls back and is rethrown (an SQLException as IllegalStateException(failure)). */

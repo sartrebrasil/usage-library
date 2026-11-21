@@ -24,6 +24,7 @@ import java.util.concurrent.Executor;
 
 import static dev.usageplatform.postgres.Jdbc.inTransaction;
 import static dev.usageplatform.postgres.Jdbc.utc;
+import static dev.usageplatform.postgres.Jdbc.query;
 
 /**
  * Ledger on PostgreSQL. One transaction per event: the insert is the dedup (ON CONFLICT DO NOTHING) and,
@@ -138,16 +139,14 @@ public final class JdbcLedger implements Ledger {
     @Override
     public CompletionStage<Optional<UsageEvent>> find(UUID eventId) {
         return CompletableFuture.supplyAsync(() -> {
-            try (Connection c = dataSource.getConnection(); PreparedStatement ps = c.prepareStatement(tables.sql(FIND))) {
+            return query(dataSource, tables.sql(FIND), "ledger read failed", ps -> {
                 ps.setObject(1, eventId);
                 try (ResultSet rs = ps.executeQuery()) {
                     if (!rs.next()) return Optional.<UsageEvent>empty();
                     return Optional.of(new UsageEvent(eventId, new TenantId(rs.getString("tenant_id")), rs.getString("metric_code"),
                             rs.getLong("quantity"), rs.getObject("occurred_at", OffsetDateTime.class).toInstant()));
                 }
-            } catch (SQLException ex) {
-                throw new IllegalStateException("ledger read failed", ex);
-            }
+            });
         }, executor);
     }
 

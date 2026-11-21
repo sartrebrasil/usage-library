@@ -60,6 +60,8 @@ public final class UsageEngine {
     private final FailMode failMode;
     private final Duration lease;
     private final UsageIngestion writes;
+    // a store outage degrades every request: log it once per interval, not once per request
+    private final LogThrottle degradedLog = new LogThrottle(Duration.ofSeconds(30), System.nanoTime());
 
     /** @param lease how long a concurrency slot lives if its holder crashes without releasing it (each holder has its own). */
     public UsageEngine(PolicyStore policies, CounterStore counters, Ledger ledger, UsageSink sink,
@@ -94,14 +96,18 @@ public final class UsageEngine {
                 .exceptionally(this::degraded);
     }
 
-    /** A store that fails is not silent: fail-mode decides the answer, and the cause is logged (without a stack trace, it can repeat per request). */
+    /** A store that fails is not silent: fail-mode decides the answer, and the cause is logged, at most once per interval. */
     private Decision degraded(Throwable ex) {
         Throwable cause = ex instanceof CompletionException && ex.getCause() != null ? ex.getCause() : ex;
         // a policy that cannot even be built (an invalid limit) is a configuration bug, not an outage: say so, loudly, with the stack
         boolean invalidPolicy = cause instanceof IllegalArgumentException;
         String reason = invalidPolicy ? Decision.INVALID_POLICY : Decision.STORE_UNAVAILABLE;
-        if (invalidPolicy) LOG.log(System.Logger.Level.ERROR, "usage policy is invalid, fail-mode " + failMode, cause);
-        else LOG.log(System.Logger.Level.WARNING, "usage store unavailable, fail-mode {0}: {1}", failMode, cause);
+        long suppressed = degradedLog.admit(System.nanoTime());
+        if (suppressed >= 0) {
+            String more = suppressed == 0 ? "" : " (" + suppressed + " similar decisions since the last log line)";
+            if (invalidPolicy) LOG.log(System.Logger.Level.ERROR, "usage policy is invalid, fail-mode " + failMode + more, cause);
+            else LOG.log(System.Logger.Level.WARNING, "usage store unavailable, fail-mode " + failMode + more + ": " + cause);
+        }
         return failMode == FailMode.OPEN ? Decision.allowDegraded(reason) : Decision.deny(reason);
     }
 

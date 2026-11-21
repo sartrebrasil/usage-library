@@ -12,8 +12,6 @@ import dev.usageplatform.core.TenantId;
 import dev.usageplatform.core.Window;
 
 import javax.sql.DataSource;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Clock;
@@ -28,6 +26,7 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
 
 import static dev.usageplatform.postgres.Jdbc.utc;
+import static dev.usageplatform.postgres.Jdbc.query;
 
 /**
  * Reads the tenant's current plan, applies overrides and builds the core {@link Policy}. The policy's anchor is
@@ -80,7 +79,7 @@ public final class JdbcPolicyStore implements PolicyStore {
 
     private Optional<Policy> load(TenantId tenant) {
         OffsetDateTime now = utc(clock.instant());
-        try (Connection c = dataSource.getConnection(); PreparedStatement ps = c.prepareStatement(tables.sql(QUERY))) {
+        return query(dataSource, tables.sql(QUERY), "policy load failed", ps -> {
             ps.setObject(1, now);
             ps.setObject(2, now);
             ps.setObject(3, now);
@@ -98,9 +97,7 @@ public final class JdbcPolicyStore implements PolicyStore {
                 }
                 return anchor == null ? Optional.empty() : Optional.of(new Policy(plan, anchor, List.copyOf(limits)));
             }
-        } catch (SQLException ex) {
-            throw new IllegalStateException("policy load failed", ex);
-        }
+        });
     }
 
     private static Limit toLimit(ResultSet rs, String code) throws SQLException {

@@ -6,10 +6,7 @@ import dev.usageplatform.core.SummaryStore;
 import dev.usageplatform.core.TenantId;
 
 import javax.sql.DataSource;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -20,6 +17,7 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
 
 import static dev.usageplatform.postgres.Jdbc.utc;
+import static dev.usageplatform.postgres.Jdbc.query;
 
 /**
  * Reads and closes usage_summary rows. Run {@link #closeEndedBefore} from a scheduled job on a single
@@ -65,7 +63,7 @@ public final class JdbcSummaryStore implements SummaryStore {
     @Override
     public CompletionStage<Optional<Summary>> find(TenantId tenant, String metricCode, String windowKey, Instant periodStart) {
         return CompletableFuture.supplyAsync(() -> {
-            try (Connection c = dataSource.getConnection(); PreparedStatement ps = c.prepareStatement(tables.sql(FIND))) {
+            return query(dataSource, tables.sql(FIND), "summary read failed", ps -> {
                 ps.setString(1, tenant.value());
                 ps.setString(2, metricCode);
                 ps.setString(3, windowKey);
@@ -78,16 +76,14 @@ public final class JdbcSummaryStore implements SummaryStore {
                             rs.getLong("late_total"), rs.getLong("credits"), "CLOSED".equals(rs.getString("status")),
                             new Plan(rs.getString("plan_code"), rs.getInt("plan_version"))));
                 }
-            } catch (SQLException ex) {
-                throw new IllegalStateException("summary read failed", ex);
-            }
+            });
         }, executor);
     }
 
     @Override
     public CompletionStage<List<Summary>> openSettledBefore(Instant updatedBefore) {
         return CompletableFuture.supplyAsync(() -> {
-            try (Connection c = dataSource.getConnection(); PreparedStatement ps = c.prepareStatement(tables.sql(OPEN_SETTLED))) {
+            return query(dataSource, tables.sql(OPEN_SETTLED), "summary scan failed", ps -> {
                 ps.setObject(1, utc(updatedBefore));
                 try (ResultSet rs = ps.executeQuery()) {
                     List<Summary> out = new ArrayList<>();
@@ -101,21 +97,17 @@ public final class JdbcSummaryStore implements SummaryStore {
                     }
                     return out;
                 }
-            } catch (SQLException ex) {
-                throw new IllegalStateException("summary scan failed", ex);
-            }
+            });
         }, executor);
     }
 
     @Override
     public CompletionStage<Integer> closeEndedBefore(Instant cutoff) {
         return CompletableFuture.supplyAsync(() -> {
-            try (Connection c = dataSource.getConnection(); PreparedStatement ps = c.prepareStatement(tables.sql(CLOSE))) {
+            return query(dataSource, tables.sql(CLOSE), "summary close failed", ps -> {
                 ps.setObject(1, utc(cutoff));
                 return ps.executeUpdate();
-            } catch (SQLException ex) {
-                throw new IllegalStateException("summary close failed", ex);
-            }
+            });
         }, executor);
     }
 }

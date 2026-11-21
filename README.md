@@ -328,7 +328,7 @@ suba as duas bibliotecas para um repositório de artefatos e aponte o build para
 
 | Propriedade | Padrão | Descrição |
 |---|---|---|
-| `usage.fail-mode` | `OPEN` | Comportamento se os stores falharem; cada decisão degradada é registrada em WARNING (`dev.usageplatform.core.UsageEngine`), sem stack trace |
+| `usage.fail-mode` | `OPEN` | Comportamento se os stores falharem; decisões degradadas são registradas em WARNING (`dev.usageplatform.core.UsageEngine`), no máximo uma linha a cada 30 s com a contagem das omitidas; uma política inválida sai em ERROR com o motivo `invalid_policy` |
 | `usage.concurrency-lease` | `15m` | Vida de cada slot de concorrência, contada por dono |
 | `usage.policy-cache-ttl` | `1m` | Cache da política por tenant |
 | `usage.counters.type` | `redis` | `memory` só para uma instância |
@@ -420,7 +420,7 @@ schema, eles usam o `search_path` como antes, **mas então o Flyway migra o sche
 
 ```bash
 cd usage-platform
-mvn test            # 234 testes; Redis e PostgreSQL reais em contêineres
+mvn test            # 236 testes; Redis e PostgreSQL reais em contêineres
 mvn install         # instala os módulos no repositório local
 ```
 
