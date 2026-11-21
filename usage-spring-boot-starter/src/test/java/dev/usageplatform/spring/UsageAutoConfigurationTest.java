@@ -1,23 +1,23 @@
 package dev.usageplatform.spring;
 
 import dev.usageplatform.consumer.UsageEventConsumer;
-import dev.usageplatform.core.CounterStore;
-import dev.usageplatform.core.InMemoryCounterStore;
-import dev.usageplatform.core.InMemoryJobLock;
-import dev.usageplatform.core.InMemoryLedger;
-import dev.usageplatform.core.JobLock;
-import dev.usageplatform.core.Limit;
-import dev.usageplatform.core.Limit.Enforcement;
-import dev.usageplatform.core.Limit.Type;
 import dev.usageplatform.core.MaintenanceScheduler;
-import dev.usageplatform.core.Metric;
-import dev.usageplatform.core.Metric.Mode;
-import dev.usageplatform.core.Policy;
-import dev.usageplatform.core.PolicyStore;
-import dev.usageplatform.core.TenantId;
-import dev.usageplatform.core.TenantResolver;
-import dev.usageplatform.core.UsageSink;
 import dev.usageplatform.core.UsageEngine;
+import dev.usageplatform.core.memory.InMemoryCounterStore;
+import dev.usageplatform.core.memory.InMemoryJobLock;
+import dev.usageplatform.core.memory.InMemoryLedger;
+import dev.usageplatform.core.model.Limit;
+import dev.usageplatform.core.model.Limit.Enforcement;
+import dev.usageplatform.core.model.Limit.Type;
+import dev.usageplatform.core.model.Metric;
+import dev.usageplatform.core.model.Metric.Mode;
+import dev.usageplatform.core.model.Policy;
+import dev.usageplatform.core.model.TenantId;
+import dev.usageplatform.core.spi.CounterStore;
+import dev.usageplatform.core.spi.JobLock;
+import dev.usageplatform.core.spi.PolicyStore;
+import dev.usageplatform.core.spi.TenantResolver;
+import dev.usageplatform.core.spi.UsageSink;
 import dev.usageplatform.gateway.UsageGatewayFilter;
 import dev.usageplatform.processor.QueueUsageAdapter;
 import org.junit.jupiter.api.Test;
@@ -40,7 +40,6 @@ import java.util.concurrent.CompletableFuture;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class UsageAutoConfigurationTest {
     static final Metric API = new Metric("API_REQUESTS", Mode.CONSUME_ON_CHECK);

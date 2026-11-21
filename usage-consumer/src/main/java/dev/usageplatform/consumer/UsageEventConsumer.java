@@ -12,7 +12,7 @@ import java.time.Instant;
 import java.util.concurrent.CompletionStage;
 import java.util.function.Predicate;
 
-import static dev.usageplatform.core.Stages.done;
+import static dev.usageplatform.core.spi.Stages.done;
 
 /**
  * The central consumer, broker-agnostic: the host passes each message body and acts on the outcome

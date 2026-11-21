@@ -1,11 +1,10 @@
 package dev.usageplatform.postgres;
 
-import dev.usageplatform.core.Period;
-import dev.usageplatform.core.Plan;
-import dev.usageplatform.core.SummaryStore;
-import dev.usageplatform.core.TenantId;
+import dev.usageplatform.core.model.Period;
+import dev.usageplatform.core.model.Plan;
+import dev.usageplatform.core.model.TenantId;
+import dev.usageplatform.core.spi.SummaryStore;
 
-import javax.sql.DataSource;
 import java.sql.ResultSet;
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -15,6 +14,7 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
+import javax.sql.DataSource;
 
 import static dev.usageplatform.postgres.Jdbc.utc;
 import static dev.usageplatform.postgres.Jdbc.query;

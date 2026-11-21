@@ -1,12 +1,12 @@
 package dev.usageplatform.spring;
 
 import dev.usageplatform.core.CounterReconciler;
-import dev.usageplatform.core.CounterStore;
-import dev.usageplatform.core.JobLock;
 import dev.usageplatform.core.MaintenanceScheduler;
 import dev.usageplatform.core.PeriodMaintenance;
-import dev.usageplatform.core.PolicyStore;
-import dev.usageplatform.core.SummaryStore;
+import dev.usageplatform.core.spi.CounterStore;
+import dev.usageplatform.core.spi.JobLock;
+import dev.usageplatform.core.spi.PolicyStore;
+import dev.usageplatform.core.spi.SummaryStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;

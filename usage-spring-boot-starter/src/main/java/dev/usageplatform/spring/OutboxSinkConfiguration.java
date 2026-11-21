@@ -1,7 +1,7 @@
 package dev.usageplatform.spring;
 
 import com.example.outbox.core.OutboxWriter;
-import dev.usageplatform.core.UsageSink;
+import dev.usageplatform.core.spi.UsageSink;
 import dev.usageplatform.messaging.OutboxUsageSink;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;

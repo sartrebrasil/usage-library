@@ -1,22 +1,21 @@
 package dev.usageplatform.gateway;
 
-import dev.usageplatform.core.Compensation;
-import dev.usageplatform.core.InMemoryCounterStore;
-import dev.usageplatform.core.InMemoryLedger;
-import dev.usageplatform.core.Limit;
-import dev.usageplatform.core.Limit.Enforcement;
-import dev.usageplatform.core.Limit.Type;
-import dev.usageplatform.core.Metric;
-import dev.usageplatform.core.Metric.Mode;
-import dev.usageplatform.core.Plan;
-import dev.usageplatform.core.Policy;
-import dev.usageplatform.core.TenantId;
 import dev.usageplatform.core.UsageEngine;
 import dev.usageplatform.core.UsageEngine.FailMode;
-import dev.usageplatform.core.UsageEvent;
+import dev.usageplatform.core.memory.InMemoryCounterStore;
+import dev.usageplatform.core.memory.InMemoryLedger;
+import dev.usageplatform.core.model.Compensation;
+import dev.usageplatform.core.model.Limit;
+import dev.usageplatform.core.model.Limit.Enforcement;
+import dev.usageplatform.core.model.Limit.Type;
+import dev.usageplatform.core.model.Metric;
+import dev.usageplatform.core.model.Metric.Mode;
+import dev.usageplatform.core.model.Plan;
+import dev.usageplatform.core.model.Policy;
+import dev.usageplatform.core.model.TenantId;
+import dev.usageplatform.core.model.UsageEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.http.HttpStatus;
 import org.springframework.mock.http.server.reactive.MockServerHttpRequest;
 import org.springframework.mock.web.server.MockServerWebExchange;
@@ -182,7 +181,7 @@ class GatewayMeteringRulesTest {
         return ex.getResponse().getBodyAsString().block();
     }
 
-    private UsageEngine engineFor(Policy policy, FailMode mode, dev.usageplatform.core.CounterStore counters) {
+    private UsageEngine engineFor(Policy policy, FailMode mode, dev.usageplatform.core.spi.CounterStore counters) {
         return new UsageEngine(t -> CompletableFuture.completedFuture(Optional.ofNullable(policy)), counters, new InMemoryLedger(CLOCK),
                 message -> CompletableFuture.completedFuture(null), CLOCK, mode, Duration.ofMinutes(15));
     }
@@ -195,7 +194,7 @@ class GatewayMeteringRulesTest {
 
     @Test
     void aStoreOutageUnderFailClosedGets503() {
-        var down = new dev.usageplatform.core.CounterStore() {
+        var down = new dev.usageplatform.core.spi.CounterStore() {
             public java.util.concurrent.CompletionStage<Result> add(String k, long d, long c, Duration t) { return CompletableFuture.failedFuture(new IllegalStateException("redis down")); }
             public java.util.concurrent.CompletionStage<Long> get(String k) { return CompletableFuture.failedFuture(new IllegalStateException("redis down")); }
         };

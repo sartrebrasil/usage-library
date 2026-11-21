@@ -1,14 +1,20 @@
 package dev.usageplatform.core;
 
-import dev.usageplatform.core.Limit.Type;
-import dev.usageplatform.core.Metric.Mode;
+import dev.usageplatform.core.model.Limit;
+import dev.usageplatform.core.model.Limit.Type;
+import dev.usageplatform.core.model.Metric.Mode;
+import dev.usageplatform.core.model.PeriodCalculator;
+import dev.usageplatform.core.model.Policy;
+import dev.usageplatform.core.spi.CounterStore;
+import dev.usageplatform.core.spi.PolicyStore;
+import dev.usageplatform.core.spi.SummaryStore;
 
 import java.time.Clock;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.concurrent.CompletionStage;
 
-import static dev.usageplatform.core.Stages.done;
+import static dev.usageplatform.core.spi.Stages.done;
 
 /**
  * Repairs the quota counters (a cache) from usage_summary (the truth). Run it from a scheduled job on a

@@ -1,7 +1,7 @@
 package dev.usageplatform.spring;
 
-import dev.usageplatform.core.TenantResolver;
 import dev.usageplatform.core.UsageEngine;
+import dev.usageplatform.core.spi.TenantResolver;
 import dev.usageplatform.gateway.MeteredMetric;
 import dev.usageplatform.gateway.UsageGatewayFilter;
 import org.springframework.beans.factory.ObjectProvider;

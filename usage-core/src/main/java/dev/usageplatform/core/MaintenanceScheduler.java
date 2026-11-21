@@ -1,5 +1,7 @@
 package dev.usageplatform.core;
 
+import dev.usageplatform.core.spi.JobLock;
+
 import java.time.Duration;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executors;

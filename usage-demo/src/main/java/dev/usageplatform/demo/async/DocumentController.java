@@ -1,8 +1,8 @@
 package dev.usageplatform.demo.async;
 
-import dev.usageplatform.core.Decision;
-import dev.usageplatform.core.TenantId;
 import dev.usageplatform.core.UsageEngine;
+import dev.usageplatform.core.model.Decision;
+import dev.usageplatform.core.model.TenantId;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;

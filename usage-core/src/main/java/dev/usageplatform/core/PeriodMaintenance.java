@@ -1,5 +1,7 @@
 package dev.usageplatform.core;
 
+import dev.usageplatform.core.spi.SummaryStore;
+
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;

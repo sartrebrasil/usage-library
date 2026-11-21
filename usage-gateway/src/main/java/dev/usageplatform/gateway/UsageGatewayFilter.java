@@ -1,12 +1,12 @@
 package dev.usageplatform.gateway;
 
-import dev.usageplatform.core.Compensation;
-import dev.usageplatform.core.Decision;
-import dev.usageplatform.core.Plan;
-import dev.usageplatform.core.TenantId;
-import dev.usageplatform.core.TenantResolver;
 import dev.usageplatform.core.UsageEngine;
-import dev.usageplatform.core.UsageEvent;
+import dev.usageplatform.core.model.Compensation;
+import dev.usageplatform.core.model.Decision;
+import dev.usageplatform.core.model.Plan;
+import dev.usageplatform.core.model.TenantId;
+import dev.usageplatform.core.model.UsageEvent;
+import dev.usageplatform.core.spi.TenantResolver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;

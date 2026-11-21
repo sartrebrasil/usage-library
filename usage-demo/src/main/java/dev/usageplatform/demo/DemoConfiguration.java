@@ -2,9 +2,9 @@ package dev.usageplatform.demo;
 
 import dev.usageplatform.consumer.UsageEventConsumer;
 import dev.usageplatform.consumer.UsageEventJson;
-import dev.usageplatform.core.TenantId;
-import dev.usageplatform.core.TenantResolver;
-import dev.usageplatform.core.UsageSink;
+import dev.usageplatform.core.model.TenantId;
+import dev.usageplatform.core.spi.TenantResolver;
+import dev.usageplatform.core.spi.UsageSink;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -12,9 +12,8 @@ import org.springframework.web.server.ServerWebExchange;
 
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
 
-import static dev.usageplatform.core.Stages.done;
+import static dev.usageplatform.core.spi.Stages.done;
 
 /**
  * The two things a host application must supply to the gateway starter: who the caller is, and where usage goes.

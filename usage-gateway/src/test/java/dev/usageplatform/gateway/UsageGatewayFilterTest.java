@@ -1,20 +1,20 @@
 package dev.usageplatform.gateway;
 
-import dev.usageplatform.core.Compensation;
-import dev.usageplatform.core.InMemoryCounterStore;
-import dev.usageplatform.core.InMemoryLedger;
-import dev.usageplatform.core.Limit;
-import dev.usageplatform.core.Limit.Enforcement;
-import dev.usageplatform.core.Limit.Type;
-import dev.usageplatform.core.Metric;
-import dev.usageplatform.core.Metric.Mode;
-import dev.usageplatform.core.Policy;
-import dev.usageplatform.core.TenantId;
-import dev.usageplatform.core.TenantResolver;
 import dev.usageplatform.core.UsageEngine;
 import dev.usageplatform.core.UsageEngine.FailMode;
-import dev.usageplatform.core.UsageEvent;
-import dev.usageplatform.core.UsageSink;
+import dev.usageplatform.core.memory.InMemoryCounterStore;
+import dev.usageplatform.core.memory.InMemoryLedger;
+import dev.usageplatform.core.model.Compensation;
+import dev.usageplatform.core.model.Limit;
+import dev.usageplatform.core.model.Limit.Enforcement;
+import dev.usageplatform.core.model.Limit.Type;
+import dev.usageplatform.core.model.Metric;
+import dev.usageplatform.core.model.Metric.Mode;
+import dev.usageplatform.core.model.Policy;
+import dev.usageplatform.core.model.TenantId;
+import dev.usageplatform.core.model.UsageEvent;
+import dev.usageplatform.core.spi.TenantResolver;
+import dev.usageplatform.core.spi.UsageSink;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
@@ -33,8 +33,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
-import java.util.function.IntPredicate;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.IntPredicate;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -245,7 +245,7 @@ class UsageGatewayFilterTest {
         Metric b = new Metric("METRIC_B", Mode.CONSUME_ON_CHECK);
         InMemoryCounterStore real = new InMemoryCounterStore(CLOCK);
         List<Long> negativeAdds = new ArrayList<>();
-        dev.usageplatform.core.CounterStore spy = new dev.usageplatform.core.CounterStore() {
+        dev.usageplatform.core.spi.CounterStore spy = new dev.usageplatform.core.spi.CounterStore() {
             public CompletionStage<Result> add(String k, long d, long c, Duration t) {
                 if (d < 0) negativeAdds.add(d);
                 // the store is down for A only: its check degrades to an allow that charged nothing

@@ -1,10 +1,24 @@
 package dev.usageplatform.core;
 
-import dev.usageplatform.core.Limit.Enforcement;
-import dev.usageplatform.core.Limit.Type;
-import dev.usageplatform.core.Metric.Mode;
 import dev.usageplatform.core.UsageEngine.FailMode;
 import dev.usageplatform.core.UsageEngine.Ingest;
+import dev.usageplatform.core.memory.InMemoryCounterStore;
+import dev.usageplatform.core.memory.InMemoryLedger;
+import dev.usageplatform.core.model.Decision;
+import dev.usageplatform.core.model.Limit;
+import dev.usageplatform.core.model.Limit.Enforcement;
+import dev.usageplatform.core.model.Limit.Type;
+import dev.usageplatform.core.model.Metric;
+import dev.usageplatform.core.model.Metric.Mode;
+import dev.usageplatform.core.model.Permit;
+import dev.usageplatform.core.model.Plan;
+import dev.usageplatform.core.model.Policy;
+import dev.usageplatform.core.model.TenantId;
+import dev.usageplatform.core.model.UsageEvent;
+import dev.usageplatform.core.model.Window;
+import dev.usageplatform.core.spi.CounterStore;
+import dev.usageplatform.core.spi.PolicyStore;
+import dev.usageplatform.core.spi.SummaryStore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -508,7 +522,6 @@ class UsageEngineTest {
         assertNotEquals(UsageEngine.counterKey(Type.QUOTA, new TenantId("x%3Ay"), "m", "1", Instant.EPOCH),
                 UsageEngine.counterKey(Type.QUOTA, new TenantId("x:y"), "m", "1", Instant.EPOCH)); // the escape itself is unambiguous
     }
-
 
     @Test
     void anAcquireThatFailsAfterTheStoreMayHaveRunGivesTheSlotBack() {

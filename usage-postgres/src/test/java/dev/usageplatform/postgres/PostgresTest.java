@@ -1,31 +1,30 @@
 package dev.usageplatform.postgres;
 
-import dev.usageplatform.core.Compensation;
-import dev.usageplatform.core.InMemoryCounterStore;
-import dev.usageplatform.core.Ledger;
-import dev.usageplatform.core.Limit;
-import dev.usageplatform.core.Limit.Enforcement;
-import dev.usageplatform.core.Limit.Type;
-import dev.usageplatform.core.Metric;
-import dev.usageplatform.core.Metric.Mode;
-import dev.usageplatform.core.Period;
-import dev.usageplatform.core.Policy;
-import dev.usageplatform.core.SummaryStore.Summary;
-import dev.usageplatform.core.TenantId;
 import dev.usageplatform.core.UsageEngine;
 import dev.usageplatform.core.UsageEngine.Compensate;
 import dev.usageplatform.core.UsageEngine.FailMode;
 import dev.usageplatform.core.UsageEngine.Ingest;
-import dev.usageplatform.core.UsageEvent;
-import dev.usageplatform.core.Window;
+import dev.usageplatform.core.memory.InMemoryCounterStore;
+import dev.usageplatform.core.model.Compensation;
+import dev.usageplatform.core.model.Limit;
+import dev.usageplatform.core.model.Limit.Enforcement;
+import dev.usageplatform.core.model.Limit.Type;
+import dev.usageplatform.core.model.Metric;
+import dev.usageplatform.core.model.Metric.Mode;
+import dev.usageplatform.core.model.Period;
+import dev.usageplatform.core.model.Policy;
+import dev.usageplatform.core.model.TenantId;
+import dev.usageplatform.core.model.UsageEvent;
+import dev.usageplatform.core.model.Window;
+import dev.usageplatform.core.spi.Ledger;
+import dev.usageplatform.core.spi.SummaryStore.Summary;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.postgresql.ds.PGSimpleDataSource;
-import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 
-import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -39,6 +38,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executors;
+import javax.sql.DataSource;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -143,7 +143,7 @@ class PostgresTest {
         Policy p = join(policies.policyFor(new TenantId("acme"))).orElseThrow();
 
         assertEquals(ANCHOR, p.anchor());
-        assertEquals(new dev.usageplatform.core.Plan("PRO", 1), p.plan());
+        assertEquals(new dev.usageplatform.core.model.Plan("PRO", 1), p.plan());
         assertEquals(4, p.limits().size());
         assertTrue(p.limits().contains(new Limit(API, Type.QUOTA, 7, Duration.ofDays(1), Enforcement.REJECT))); // override, not 100
         assertTrue(p.limits().contains(new Limit(API, Type.QUOTA, 1000, Window.months(1), Enforcement.REJECT))); // calendar month, coexists with the daily quota
@@ -186,7 +186,7 @@ class PostgresTest {
         var retention = new JdbcRetention(ds, null);
         UsageEvent old = eventFor("acme", "retention-old", 1);
         join(ledger.record(old, List.of(new Ledger.Slot("86400", new Period(Instant.parse("2020-01-01T00:00:00Z"), Instant.parse("2020-01-02T00:00:00Z")),
-                new dev.usageplatform.core.Plan("PRO", 1)))));
+                new dev.usageplatform.core.model.Plan("PRO", 1)))));
         exec("UPDATE usage_event_id SET recorded_at = '2020-01-01T00:00:00Z' WHERE event_id = '" + old.eventId() + "'");
         UsageEvent recent = eventFor("acme", "retention-recent", 1);
         join(ledger.record(recent, List.of()));
@@ -253,7 +253,7 @@ class PostgresTest {
     void failedSummaryWriteRollsBackTheEventSoRetryIsNotADuplicate() {
         UsageEvent e = eventFor("ledgerco", "atomic", 1);
         Instant s = Instant.parse("2026-11-19T00:00:00Z");
-        var invalidPeriod = List.of(new Ledger.Slot("86400", new Period(s, s), dev.usageplatform.core.Plan.UNSPECIFIED)); // violates the period check
+        var invalidPeriod = List.of(new Ledger.Slot("86400", new Period(s, s), dev.usageplatform.core.model.Plan.UNSPECIFIED)); // violates the period check
         assertThrows(CompletionException.class, () -> join(ledger.record(e, invalidPeriod)));
         assertTrue(join(ledger.record(e, List.of())));
     }
@@ -333,7 +333,7 @@ class PostgresTest {
         subscriptions.changePlan(mover, "BASIC", 1, Instant.parse("2026-11-10T00:00:00Z")); // mid-cycle
         Policy basic = join(policies.policyFor(mover)).orElseThrow();
         assertEquals(ANCHOR, basic.anchor()); // the cycle did not move
-        assertEquals(new dev.usageplatform.core.Plan("BASIC", 1), basic.plan());
+        assertEquals(new dev.usageplatform.core.model.Plan("BASIC", 1), basic.plan());
         assertEquals(List.of(new Limit(API, Type.QUOTA, 10, Duration.ofDays(1), Enforcement.REJECT)), basic.limits());
     }
 
@@ -388,7 +388,7 @@ class PostgresTest {
         TenantId t = new TenantId("ledgerco");
         Instant day = Instant.parse("2026-10-05T00:00:00Z");
         join(ledger.record(new UsageEvent(UsageEvent.idFor(t, "old-day", "ITEMS_PROCESSED"), t, "ITEMS_PROCESSED", 3, day.plusSeconds(5)),
-                List.of(new Ledger.Slot("86400", new Period(day, day.plus(Duration.ofDays(1))), dev.usageplatform.core.Plan.UNSPECIFIED))));
+                List.of(new Ledger.Slot("86400", new Period(day, day.plus(Duration.ofDays(1))), dev.usageplatform.core.model.Plan.UNSPECIFIED))));
         assertFalse(join(summaries.find(t, "ITEMS_PROCESSED", "86400", day)).orElseThrow().closed());
 
         var outcome = join(scheduler.runOnce());
@@ -407,15 +407,15 @@ class PostgresTest {
         Instant day = Instant.parse("2026-12-20T00:00:00Z");
         java.util.function.Function<String, UsageEvent> api = item ->
                 new UsageEvent(UsageEvent.idFor(t, item, "API_REQUESTS"), t, "API_REQUESTS", 1, day.plusSeconds(5));
-        java.util.function.Supplier<dev.usageplatform.core.SummaryStore.Summary> daily = () ->
+        java.util.function.Supplier<dev.usageplatform.core.spi.SummaryStore.Summary> daily = () ->
                 join(summaries.find(t, "API_REQUESTS", "86400", day)).orElseThrow();
 
         join(engine.ingest(api.apply("p1")));
-        assertEquals(new dev.usageplatform.core.Plan("PRO", 1), daily.get().plan());
+        assertEquals(new dev.usageplatform.core.model.Plan("PRO", 1), daily.get().plan());
 
         subscriptions.changePlan(t, "BASIC", 1, Instant.parse("2026-11-10T00:00:00Z")); // moves mid-period
         join(engine.ingest(api.apply("p2")));
-        assertEquals(new dev.usageplatform.core.Plan("BASIC", 1), daily.get().plan());
+        assertEquals(new dev.usageplatform.core.model.Plan("BASIC", 1), daily.get().plan());
 
         join(summaries.closeEndedBefore(Instant.parse("2026-12-21T00:00:00Z")));
         subscriptions.changePlan(t, "PRO", 1, Instant.parse("2026-11-15T00:00:00Z"));
@@ -423,7 +423,7 @@ class PostgresTest {
 
         var closed = daily.get();
         assertTrue(closed.closed());
-        assertEquals(new dev.usageplatform.core.Plan("BASIC", 1), closed.plan()); // frozen at the plan it closed under
+        assertEquals(new dev.usageplatform.core.model.Plan("BASIC", 1), closed.plan()); // frozen at the plan it closed under
         assertEquals(2, closed.total());
         assertEquals(1, closed.lateTotal());
     }
@@ -431,11 +431,11 @@ class PostgresTest {
     // ---- concurrency and ordering --------------------------------------------------------------------------
 
     private static Ledger.Slot daySlot(Instant day) {
-        return new Ledger.Slot("86400", new Period(day, day.plus(Duration.ofDays(1))), new dev.usageplatform.core.Plan("PRO", 1));
+        return new Ledger.Slot("86400", new Period(day, day.plus(Duration.ofDays(1))), new dev.usageplatform.core.model.Plan("PRO", 1));
     }
 
     private static Ledger.Slot monthSlot(Instant monthStart, Instant monthEnd) {
-        return new Ledger.Slot("m1", new Period(monthStart, monthEnd), new dev.usageplatform.core.Plan("PRO", 1));
+        return new Ledger.Slot("m1", new Period(monthStart, monthEnd), new dev.usageplatform.core.model.Plan("PRO", 1));
     }
 
     @Test
@@ -573,7 +573,7 @@ class PostgresTest {
 
         subscriptions.subscribe(t, "DED", 1, ANCHOR);
         Policy policy = join(dedicatedPolicies.policyFor(t)).orElseThrow();
-        assertEquals(new dev.usageplatform.core.Plan("DED", 1), policy.plan());
+        assertEquals(new dev.usageplatform.core.model.Plan("DED", 1), policy.plan());
         assertEquals(1, policy.limits().size());
 
         var engine = new UsageEngine(dedicatedPolicies, new InMemoryCounterStore(CLOCK), dedicatedLedger,
@@ -590,7 +590,7 @@ class PostgresTest {
         assertTrue(join(dedicatedSummaries.find(t, "ITEMS_PROCESSED", "86400", day)).orElseThrow().closed());
 
         subscriptions.changePlan(t, "DED2", 1, Instant.parse("2026-11-10T00:00:00Z"));
-        assertEquals(new dev.usageplatform.core.Plan("DED2", 1), join(dedicatedPolicies.policyFor(t)).orElseThrow().plan());
+        assertEquals(new dev.usageplatform.core.model.Plan("DED2", 1), join(dedicatedPolicies.policyFor(t)).orElseThrow().plan());
 
         // the host's own tables were not touched by any of it
         try (Connection c = hostDs.getConnection(); Statement st = c.createStatement()) {

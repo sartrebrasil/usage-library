@@ -112,6 +112,15 @@ Duas coisas que o billing precisa saber antes de ler a tabela:
 As SPIs do core (`PolicyStore`, `CounterStore`, `Ledger`, `SummaryStore`, `UsageSink`, `TenantResolver`,
 `JobLock`) são o ponto de extensão: troque Redis ou Postgres implementando a interface.
 
+O `usage-core` se organiza em quatro pacotes, e a dependência vai sempre no mesmo sentido (`model` ← `spi` ← `memory` e o motor):
+
+| Pacote | O que tem |
+|---|---|
+| `dev.usageplatform.core` | O motor (`UsageEngine`), a reconciliação de contadores e a manutenção de períodos |
+| `dev.usageplatform.core.model` | Plano, política, limite, métrica, janela, período, tenant, eventos e as respostas do motor (`Decision`, `Permit`) |
+| `dev.usageplatform.core.spi` | As interfaces que você implementa (as SPIs acima) |
+| `dev.usageplatform.core.memory` | Implementações em memória (contadores, ledger, lock) e o cache de políticas, para testes e uso de uma só instância |
+
 ## Início rápido (Spring Cloud Gateway)
 
 Importe o BOM (`usage-bom`, instalado com `mvn install`) e declare os módulos sem versão:

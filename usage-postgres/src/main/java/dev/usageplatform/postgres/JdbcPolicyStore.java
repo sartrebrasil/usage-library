@@ -1,17 +1,16 @@
 package dev.usageplatform.postgres;
 
-import dev.usageplatform.core.Limit;
-import dev.usageplatform.core.Limit.Enforcement;
-import dev.usageplatform.core.Limit.Type;
-import dev.usageplatform.core.Metric;
-import dev.usageplatform.core.Metric.Mode;
-import dev.usageplatform.core.Plan;
-import dev.usageplatform.core.Policy;
-import dev.usageplatform.core.PolicyStore;
-import dev.usageplatform.core.TenantId;
-import dev.usageplatform.core.Window;
+import dev.usageplatform.core.model.Limit;
+import dev.usageplatform.core.model.Limit.Enforcement;
+import dev.usageplatform.core.model.Limit.Type;
+import dev.usageplatform.core.model.Metric;
+import dev.usageplatform.core.model.Metric.Mode;
+import dev.usageplatform.core.model.Plan;
+import dev.usageplatform.core.model.Policy;
+import dev.usageplatform.core.model.TenantId;
+import dev.usageplatform.core.model.Window;
+import dev.usageplatform.core.spi.PolicyStore;
 
-import javax.sql.DataSource;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Clock;
@@ -24,6 +23,7 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
+import javax.sql.DataSource;
 
 import static dev.usageplatform.postgres.Jdbc.utc;
 import static dev.usageplatform.postgres.Jdbc.query;

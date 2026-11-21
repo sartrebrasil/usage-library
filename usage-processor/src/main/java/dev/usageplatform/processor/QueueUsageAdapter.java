@@ -1,10 +1,10 @@
 package dev.usageplatform.processor;
 
-import dev.usageplatform.core.Decision;
-import dev.usageplatform.core.Permit;
-import dev.usageplatform.core.TenantId;
 import dev.usageplatform.core.UsageEngine;
-import dev.usageplatform.core.UsageEvent;
+import dev.usageplatform.core.model.Decision;
+import dev.usageplatform.core.model.Permit;
+import dev.usageplatform.core.model.TenantId;
+import dev.usageplatform.core.model.UsageEvent;
 
 import java.time.Instant;
 import java.util.Map;
@@ -17,7 +17,7 @@ import java.util.concurrent.Executor;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
-import static dev.usageplatform.core.Stages.done;
+import static dev.usageplatform.core.spi.Stages.done;
 
 /**
  * Processor side of a result metric (e.g. ITEMS_PROCESSED). Broker-agnostic: the host hands over the

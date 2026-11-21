@@ -1,7 +1,7 @@
 package dev.usageplatform.demo.async;
 
-import dev.usageplatform.core.UsageEvent;
-import dev.usageplatform.core.UsageSink;
+import dev.usageplatform.core.model.UsageEvent;
+import dev.usageplatform.core.spi.UsageSink;
 import dev.usageplatform.processor.QueueUsageAdapter;
 import dev.usageplatform.processor.QueueUsageAdapter.Done;
 import jakarta.annotation.PostConstruct;
@@ -17,16 +17,15 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.ExecutorService;
 
-import static dev.usageplatform.core.Stages.done;
+import static dev.usageplatform.core.spi.Stages.done;
 
 /**
  * The processor. An in-memory queue stands in for your broker (RabbitMQ, SQS...): in production the same

@@ -1,6 +1,5 @@
 package dev.usageplatform.messaging;
 
-import com.example.messaging.MessageReceiver;
 import com.example.messaging.MessageSender;
 import com.example.messaging.inbox.ConsumerSettings;
 import com.example.messaging.inbox.DelayedStrategy;
@@ -26,16 +25,15 @@ import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
 import com.rabbitmq.client.GetResponse;
 import dev.usageplatform.consumer.UsageEventConsumer;
-import dev.usageplatform.consumer.UsageEventJson;
-import dev.usageplatform.core.Compensation;
-import dev.usageplatform.core.InMemoryCounterStore;
-import dev.usageplatform.core.PeriodCalculator;
-import dev.usageplatform.core.SummaryStore.Summary;
-import dev.usageplatform.core.TenantId;
 import dev.usageplatform.core.UsageEngine;
 import dev.usageplatform.core.UsageEngine.FailMode;
-import dev.usageplatform.core.UsageEvent;
-import dev.usageplatform.core.Window;
+import dev.usageplatform.core.memory.InMemoryCounterStore;
+import dev.usageplatform.core.model.Compensation;
+import dev.usageplatform.core.model.PeriodCalculator;
+import dev.usageplatform.core.model.TenantId;
+import dev.usageplatform.core.model.UsageEvent;
+import dev.usageplatform.core.model.Window;
+import dev.usageplatform.core.spi.SummaryStore.Summary;
 import dev.usageplatform.postgres.JdbcLedger;
 import dev.usageplatform.postgres.JdbcPolicyStore;
 import dev.usageplatform.postgres.JdbcSubscriptions;
@@ -56,7 +54,6 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
-import javax.sql.DataSource;
 import java.sql.Statement;
 import java.time.Clock;
 import java.time.Duration;
@@ -68,6 +65,7 @@ import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.function.BooleanSupplier;
+import javax.sql.DataSource;
 
 import static org.junit.jupiter.api.Assertions.*;
 

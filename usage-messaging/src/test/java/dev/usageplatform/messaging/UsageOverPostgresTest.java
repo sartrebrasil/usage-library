@@ -5,11 +5,11 @@ import com.example.outbox.spring.JdbcOutboxWriter;
 import dev.usageplatform.consumer.UsageEventConsumer;
 import dev.usageplatform.consumer.UsageEventConsumer.Disposition;
 import dev.usageplatform.consumer.UsageEventJson;
-import dev.usageplatform.core.InMemoryCounterStore;
-import dev.usageplatform.core.TenantId;
 import dev.usageplatform.core.UsageEngine;
 import dev.usageplatform.core.UsageEngine.FailMode;
-import dev.usageplatform.core.UsageEvent;
+import dev.usageplatform.core.memory.InMemoryCounterStore;
+import dev.usageplatform.core.model.TenantId;
+import dev.usageplatform.core.model.UsageEvent;
 import dev.usageplatform.postgres.JdbcLedger;
 import dev.usageplatform.postgres.JdbcPolicyStore;
 import dev.usageplatform.postgres.JdbcSubscriptions;
@@ -28,19 +28,18 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
-import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.Statement;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executors;
+import javax.sql.DataSource;
 
 import static org.junit.jupiter.api.Assertions.*;
 

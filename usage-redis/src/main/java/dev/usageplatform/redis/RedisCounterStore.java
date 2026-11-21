@@ -1,6 +1,6 @@
 package dev.usageplatform.redis;
 
-import dev.usageplatform.core.CounterStore;
+import dev.usageplatform.core.spi.CounterStore;
 import io.lettuce.core.ScriptOutputType;
 import io.lettuce.core.api.async.RedisAsyncCommands;
 

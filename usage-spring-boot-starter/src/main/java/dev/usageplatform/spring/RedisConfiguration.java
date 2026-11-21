@@ -1,6 +1,6 @@
 package dev.usageplatform.spring;
 
-import dev.usageplatform.core.CounterStore;
+import dev.usageplatform.core.spi.CounterStore;
 import dev.usageplatform.redis.RedisCounterStore;
 import io.lettuce.core.ClientOptions;
 import io.lettuce.core.RedisClient;

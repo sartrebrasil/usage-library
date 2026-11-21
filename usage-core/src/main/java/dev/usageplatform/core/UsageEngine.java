@@ -1,8 +1,21 @@
 package dev.usageplatform.core;
 
-import dev.usageplatform.core.Limit.Enforcement;
-import dev.usageplatform.core.Limit.Type;
-import dev.usageplatform.core.Metric.Mode;
+import dev.usageplatform.core.model.Compensation;
+import dev.usageplatform.core.model.Decision;
+import dev.usageplatform.core.model.Limit;
+import dev.usageplatform.core.model.Limit.Enforcement;
+import dev.usageplatform.core.model.Limit.Type;
+import dev.usageplatform.core.model.Metric.Mode;
+import dev.usageplatform.core.model.PeriodCalculator;
+import dev.usageplatform.core.model.Permit;
+import dev.usageplatform.core.model.Policy;
+import dev.usageplatform.core.model.TenantId;
+import dev.usageplatform.core.model.UsageEvent;
+import dev.usageplatform.core.model.Window;
+import dev.usageplatform.core.spi.CounterStore;
+import dev.usageplatform.core.spi.Ledger;
+import dev.usageplatform.core.spi.PolicyStore;
+import dev.usageplatform.core.spi.UsageSink;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -18,7 +31,7 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
-import static dev.usageplatform.core.Stages.done;
+import static dev.usageplatform.core.spi.Stages.done;
 
 /**
  * The decision engine. Adapters (gateway filter, servlet filter, queue consumer) only translate

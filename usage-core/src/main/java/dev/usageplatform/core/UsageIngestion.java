@@ -1,7 +1,14 @@
 package dev.usageplatform.core;
 
-import dev.usageplatform.core.Limit.Type;
-import dev.usageplatform.core.Metric.Mode;
+import dev.usageplatform.core.model.Compensation;
+import dev.usageplatform.core.model.Limit.Type;
+import dev.usageplatform.core.model.Metric.Mode;
+import dev.usageplatform.core.model.PeriodCalculator;
+import dev.usageplatform.core.model.Policy;
+import dev.usageplatform.core.model.UsageEvent;
+import dev.usageplatform.core.spi.CounterStore;
+import dev.usageplatform.core.spi.Ledger;
+import dev.usageplatform.core.spi.PolicyStore;
 
 import java.time.Duration;
 import java.util.List;
@@ -9,7 +16,7 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
-import static dev.usageplatform.core.Stages.done;
+import static dev.usageplatform.core.spi.Stages.done;
 
 /**
  * The write side of the {@link UsageEngine}: records usage and reversals in the ledger (the source of truth), then

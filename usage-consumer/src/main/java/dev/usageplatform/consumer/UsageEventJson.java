@@ -1,13 +1,13 @@
 package dev.usageplatform.consumer;
 
+import dev.usageplatform.core.model.Compensation;
+import dev.usageplatform.core.model.TenantId;
+import dev.usageplatform.core.model.UsageEvent;
+import dev.usageplatform.core.model.UsageMessage;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
-import dev.usageplatform.core.Compensation;
-import dev.usageplatform.core.TenantId;
-import dev.usageplatform.core.UsageEvent;
-import dev.usageplatform.core.UsageMessage;
 
 import java.time.Instant;
 import java.time.format.DateTimeParseException;

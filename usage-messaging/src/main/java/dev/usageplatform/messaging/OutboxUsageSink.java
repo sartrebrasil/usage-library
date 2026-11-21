@@ -3,10 +3,10 @@ package dev.usageplatform.messaging;
 import com.example.outbox.core.OutboxMessage;
 import com.example.outbox.core.OutboxWriter;
 import dev.usageplatform.consumer.UsageEventJson;
-import dev.usageplatform.core.Compensation;
-import dev.usageplatform.core.UsageEvent;
-import dev.usageplatform.core.UsageMessage;
-import dev.usageplatform.core.UsageSink;
+import dev.usageplatform.core.model.Compensation;
+import dev.usageplatform.core.model.UsageEvent;
+import dev.usageplatform.core.model.UsageMessage;
+import dev.usageplatform.core.spi.UsageSink;
 
 import java.util.Map;
 import java.util.UUID;

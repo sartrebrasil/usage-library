@@ -1,7 +1,7 @@
 package dev.usageplatform.spring;
 
-import dev.usageplatform.core.CounterStore;
-import dev.usageplatform.core.InMemoryCounterStore;
+import dev.usageplatform.core.memory.InMemoryCounterStore;
+import dev.usageplatform.core.spi.CounterStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;

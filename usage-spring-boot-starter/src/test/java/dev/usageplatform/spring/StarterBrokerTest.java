@@ -7,12 +7,12 @@ import com.example.outbox.core.MessagePublisher;
 import com.example.outbox.core.OutboxWriter;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.ConnectionFactory;
-import dev.usageplatform.core.PeriodCalculator;
-import dev.usageplatform.core.SummaryStore;
-import dev.usageplatform.core.TenantId;
-import dev.usageplatform.core.UsageEvent;
-import dev.usageplatform.core.UsageSink;
-import dev.usageplatform.core.Window;
+import dev.usageplatform.core.model.PeriodCalculator;
+import dev.usageplatform.core.model.TenantId;
+import dev.usageplatform.core.model.UsageEvent;
+import dev.usageplatform.core.model.Window;
+import dev.usageplatform.core.spi.SummaryStore;
+import dev.usageplatform.core.spi.UsageSink;
 import dev.usageplatform.messaging.OutboxUsageSink;
 import dev.usageplatform.messaging.UsageInboxHandler;
 import dev.usageplatform.postgres.JdbcSubscriptions;
@@ -31,7 +31,6 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import tools.jackson.databind.json.JsonMapper;
 
-import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.Statement;
 import java.time.Duration;
@@ -40,6 +39,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.BooleanSupplier;
+import javax.sql.DataSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -195,7 +195,7 @@ class StarterBrokerTest {
 
     static final org.springframework.boot.test.context.runner.ApplicationContextRunner GATEWAY_APP = LIGHT
             .withBean(OutboxWriter.class, StarterBrokerTest::stubWriter)
-            .withBean(dev.usageplatform.core.TenantResolver.class, () -> (dev.usageplatform.core.TenantResolver<org.springframework.web.server.ServerWebExchange>)
+            .withBean(dev.usageplatform.core.spi.TenantResolver.class, () -> (dev.usageplatform.core.spi.TenantResolver<org.springframework.web.server.ServerWebExchange>)
                     ex -> java.util.concurrent.CompletableFuture.completedFuture(java.util.Optional.of(new TenantId("acme"))))
             .withPropertyValues("usage.messaging.outbox.destination=usage-events", "usage.gateway.enabled=true",
                     "usage.gateway.metrics[0].code=API_REQUESTS");

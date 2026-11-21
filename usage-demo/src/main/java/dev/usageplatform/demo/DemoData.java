@@ -1,6 +1,6 @@
 package dev.usageplatform.demo;
 
-import dev.usageplatform.core.TenantId;
+import dev.usageplatform.core.model.TenantId;
 import dev.usageplatform.postgres.JdbcSubscriptions;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;

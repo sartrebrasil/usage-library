@@ -1,10 +1,10 @@
 package dev.usageplatform.spring;
 
-import dev.usageplatform.core.CachedPolicyStore;
-import dev.usageplatform.core.JobLock;
-import dev.usageplatform.core.Ledger;
-import dev.usageplatform.core.PolicyStore;
-import dev.usageplatform.core.SummaryStore;
+import dev.usageplatform.core.memory.CachedPolicyStore;
+import dev.usageplatform.core.spi.JobLock;
+import dev.usageplatform.core.spi.Ledger;
+import dev.usageplatform.core.spi.PolicyStore;
+import dev.usageplatform.core.spi.SummaryStore;
 import dev.usageplatform.postgres.JdbcJobLock;
 import dev.usageplatform.postgres.JdbcLedger;
 import dev.usageplatform.postgres.JdbcPolicyStore;

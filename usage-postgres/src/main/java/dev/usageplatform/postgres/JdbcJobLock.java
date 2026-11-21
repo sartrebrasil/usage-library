@@ -1,8 +1,7 @@
 package dev.usageplatform.postgres;
 
-import dev.usageplatform.core.JobLock;
+import dev.usageplatform.core.spi.JobLock;
 
-import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -12,8 +11,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
 import java.util.function.Supplier;
+import javax.sql.DataSource;
 
-import static dev.usageplatform.core.Stages.done;
+import static dev.usageplatform.core.spi.Stages.done;
 
 /**
  * JobLock on a PostgreSQL transaction-level advisory lock: one connection stays in an open transaction for

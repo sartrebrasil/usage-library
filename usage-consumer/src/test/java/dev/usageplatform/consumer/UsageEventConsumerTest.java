@@ -2,21 +2,21 @@ package dev.usageplatform.consumer;
 
 import dev.usageplatform.consumer.UsageEventConsumer.Disposition;
 import dev.usageplatform.consumer.UsageEventConsumer.Outcome;
-import dev.usageplatform.core.Compensation;
-import dev.usageplatform.core.CounterStore;
-import dev.usageplatform.core.InMemoryCounterStore;
-import dev.usageplatform.core.InMemoryLedger;
-import dev.usageplatform.core.Ledger;
-import dev.usageplatform.core.Limit;
-import dev.usageplatform.core.Limit.Enforcement;
-import dev.usageplatform.core.Limit.Type;
-import dev.usageplatform.core.Metric;
-import dev.usageplatform.core.Metric.Mode;
-import dev.usageplatform.core.Policy;
-import dev.usageplatform.core.TenantId;
 import dev.usageplatform.core.UsageEngine;
 import dev.usageplatform.core.UsageEngine.FailMode;
-import dev.usageplatform.core.UsageEvent;
+import dev.usageplatform.core.memory.InMemoryCounterStore;
+import dev.usageplatform.core.memory.InMemoryLedger;
+import dev.usageplatform.core.model.Compensation;
+import dev.usageplatform.core.model.Limit;
+import dev.usageplatform.core.model.Limit.Enforcement;
+import dev.usageplatform.core.model.Limit.Type;
+import dev.usageplatform.core.model.Metric;
+import dev.usageplatform.core.model.Metric.Mode;
+import dev.usageplatform.core.model.Policy;
+import dev.usageplatform.core.model.TenantId;
+import dev.usageplatform.core.model.UsageEvent;
+import dev.usageplatform.core.spi.CounterStore;
+import dev.usageplatform.core.spi.Ledger;
 import org.junit.jupiter.api.Test;
 
 import java.sql.SQLException;
@@ -234,7 +234,7 @@ class UsageEventConsumerTest {
     void oneSerializerCoversBothKindsOfMessage() {
         UsageEvent usage = new UsageEvent(UUID.fromString(ID), T, "ITEMS_PROCESSED", 1, Instant.parse("2026-11-19T11:59:00Z"));
         Compensation reversal = Compensation.of(usage.eventId(), T, "ITEMS_PROCESSED", 1, Instant.parse("2026-11-19T11:59:30Z"), "X");
-        assertEquals(new UsageEventJson.Parsed.Usage(usage), UsageEventJson.parse(UsageEventJson.toJson((dev.usageplatform.core.UsageMessage) usage)));
-        assertEquals(new UsageEventJson.Parsed.Reversal(reversal), UsageEventJson.parse(UsageEventJson.toJson((dev.usageplatform.core.UsageMessage) reversal)));
+        assertEquals(new UsageEventJson.Parsed.Usage(usage), UsageEventJson.parse(UsageEventJson.toJson((dev.usageplatform.core.model.UsageMessage) usage)));
+        assertEquals(new UsageEventJson.Parsed.Reversal(reversal), UsageEventJson.parse(UsageEventJson.toJson((dev.usageplatform.core.model.UsageMessage) reversal)));
     }
 }

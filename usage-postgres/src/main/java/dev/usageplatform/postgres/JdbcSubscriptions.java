@@ -1,12 +1,12 @@
 package dev.usageplatform.postgres;
 
-import dev.usageplatform.core.TenantId;
+import dev.usageplatform.core.model.TenantId;
 
-import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.time.Instant;
+import javax.sql.DataSource;
 
 import static dev.usageplatform.postgres.Jdbc.inTransaction;
 import static dev.usageplatform.postgres.Jdbc.utc;

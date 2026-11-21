@@ -3,14 +3,14 @@ package dev.usageplatform.spring;
 import dev.usageplatform.consumer.UsageEventConsumer;
 import dev.usageplatform.consumer.UsageEventConsumer.Disposition;
 import dev.usageplatform.consumer.UsageEventJson;
-import dev.usageplatform.core.Decision;
 import dev.usageplatform.core.MaintenanceScheduler;
-import dev.usageplatform.core.PeriodCalculator;
-import dev.usageplatform.core.SummaryStore;
-import dev.usageplatform.core.TenantId;
 import dev.usageplatform.core.UsageEngine;
-import dev.usageplatform.core.UsageEvent;
-import dev.usageplatform.core.Window;
+import dev.usageplatform.core.model.Decision;
+import dev.usageplatform.core.model.PeriodCalculator;
+import dev.usageplatform.core.model.TenantId;
+import dev.usageplatform.core.model.UsageEvent;
+import dev.usageplatform.core.model.Window;
+import dev.usageplatform.core.spi.SummaryStore;
 import dev.usageplatform.postgres.JdbcSubscriptions;
 import org.junit.jupiter.api.Test;
 import org.postgresql.ds.PGSimpleDataSource;
@@ -21,13 +21,12 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
-import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.Statement;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import javax.sql.DataSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

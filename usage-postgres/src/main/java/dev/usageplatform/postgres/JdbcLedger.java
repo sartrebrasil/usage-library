@@ -1,13 +1,12 @@
 package dev.usageplatform.postgres;
 
-import dev.usageplatform.core.Compensation;
-import dev.usageplatform.core.Ledger;
-import dev.usageplatform.core.Period;
-import dev.usageplatform.core.Plan;
-import dev.usageplatform.core.TenantId;
-import dev.usageplatform.core.UsageEvent;
+import dev.usageplatform.core.model.Compensation;
+import dev.usageplatform.core.model.Period;
+import dev.usageplatform.core.model.Plan;
+import dev.usageplatform.core.model.TenantId;
+import dev.usageplatform.core.model.UsageEvent;
+import dev.usageplatform.core.spi.Ledger;
 
-import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -21,6 +20,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
+import javax.sql.DataSource;
 
 import static dev.usageplatform.postgres.Jdbc.inTransaction;
 import static dev.usageplatform.postgres.Jdbc.utc;

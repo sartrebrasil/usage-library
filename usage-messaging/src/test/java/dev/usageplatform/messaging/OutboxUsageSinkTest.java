@@ -3,9 +3,9 @@ package dev.usageplatform.messaging;
 import com.example.outbox.core.OutboxMessage;
 import com.example.outbox.core.OutboxWriter;
 import dev.usageplatform.consumer.UsageEventJson;
-import dev.usageplatform.core.Compensation;
-import dev.usageplatform.core.TenantId;
-import dev.usageplatform.core.UsageEvent;
+import dev.usageplatform.core.model.Compensation;
+import dev.usageplatform.core.model.TenantId;
+import dev.usageplatform.core.model.UsageEvent;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;

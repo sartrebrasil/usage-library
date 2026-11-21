@@ -1,10 +1,10 @@
 package dev.usageplatform.spring;
 
-import dev.usageplatform.core.CounterStore;
-import dev.usageplatform.core.Ledger;
-import dev.usageplatform.core.PolicyStore;
 import dev.usageplatform.core.UsageEngine;
-import dev.usageplatform.core.UsageSink;
+import dev.usageplatform.core.spi.CounterStore;
+import dev.usageplatform.core.spi.Ledger;
+import dev.usageplatform.core.spi.PolicyStore;
+import dev.usageplatform.core.spi.UsageSink;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
