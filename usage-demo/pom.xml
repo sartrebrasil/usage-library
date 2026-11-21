@@ -5,7 +5,7 @@
   <modelVersion>4.0.0</modelVersion>
 
   <parent>
-    <groupId>dev.usageplatform</groupId>
+    <groupId>com.example.usage</groupId>
     <artifactId>usage-platform</artifactId>
     <version>0.1.0-SNAPSHOT</version>
   </parent>
@@ -16,12 +16,15 @@
 
   <dependencies>
     <!-- the platform: the starter wires it, the others are the pieces this demo uses (versions come from usage-bom) -->
-    <dependency><groupId>dev.usageplatform</groupId><artifactId>usage-spring-boot-starter</artifactId></dependency>
-    <dependency><groupId>dev.usageplatform</groupId><artifactId>usage-gateway</artifactId></dependency>
-    <dependency><groupId>dev.usageplatform</groupId><artifactId>usage-consumer</artifactId></dependency>
-    <dependency><groupId>dev.usageplatform</groupId><artifactId>usage-processor</artifactId></dependency>
-    <dependency><groupId>dev.usageplatform</groupId><artifactId>usage-redis</artifactId></dependency>
-    <dependency><groupId>dev.usageplatform</groupId><artifactId>usage-postgres</artifactId></dependency>
+    <dependency><groupId>com.example.usage</groupId><artifactId>usage-spring-boot-starter</artifactId></dependency>
+    <dependency><groupId>com.example.usage</groupId><artifactId>usage-gateway</artifactId></dependency>
+    <dependency><groupId>com.example.usage</groupId><artifactId>usage-consumer</artifactId></dependency>
+    <dependency><groupId>com.example.usage</groupId><artifactId>usage-processor</artifactId></dependency>
+    <dependency><groupId>com.example.usage</groupId><artifactId>usage-redis</artifactId></dependency>
+    <dependency><groupId>com.example.usage</groupId><artifactId>usage-postgres</artifactId></dependency>
+    <!-- /actuator/prometheus: the platform's metrics (usage.*) next to the application's -->
+    <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-actuator</artifactId></dependency>
+    <dependency><groupId>io.micrometer</groupId><artifactId>micrometer-registry-prometheus</artifactId></dependency>
 
     <dependency>
       <groupId>org.springframework.cloud</groupId>

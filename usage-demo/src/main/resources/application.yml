@@ -44,6 +44,15 @@ usage:
   maintenance:
     enabled: true              # closes finished periods and repairs the Redis counters from the ledger
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  endpoint:
+    health:
+      show-details: never
+
 logging:
   level:
-    dev.usageplatform: INFO
+    com.example.usage: INFO

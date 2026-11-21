@@ -14,7 +14,7 @@ mvn spring-boot:run
 ```
 
 Na subida a aplicação cria as tabelas no schema `usage` (`usage.postgres.migrate=true`) e semeia o catálogo
-([DemoData](src/main/java/dev/usageplatform/demo/DemoData.java)):
+([DemoData](src/main/java/com/example/usage/demo/DemoData.java)):
 
 | Tenant | Chave (`X-Api-Key`) | Plano | Limites de `API_REQUESTS` |
 |---|---|---|---|
@@ -52,7 +52,7 @@ docker compose exec postgres psql -U usage -c \
 
 `API_REQUESTS` é uma métrica de **acesso**: o gateway a conta quando a requisição chega. `ITEMS_PROCESSED` é uma métrica de
 **resultado**: ela só é contada **depois** que um processamento assíncrono termina com um status que se cobra. Os dois lados
-convivem no mesmo demo (pacote [async](src/main/java/dev/usageplatform/demo/async)):
+convivem no mesmo demo (pacote [async](src/main/java/com/example/usage/demo/async)):
 
 ```
 POST /api/documents ──► gateway (conta a requisição: API_REQUESTS)
@@ -82,7 +82,7 @@ for i in 1 2 3 4 5; do curl -s -XPOST localhost:8080/api/documents -H 'X-Api-Key
 O que cada parte demonstra:
 
 - **Contado depois, não antes.** `QueueUsageAdapter` entrega ao seu código (`save` no
-  [DocumentWorker](src/main/java/dev/usageplatform/demo/async/DocumentWorker.java)) o resultado e o evento de uso juntos. O
+  [DocumentWorker](src/main/java/com/example/usage/demo/async/DocumentWorker.java)) o resultado e o evento de uso juntos. O
   evento só existe se o status final está em `usage.processor.countable-statuses` (`COMPLETED`).
 - **Reentrega não cobra duas vezes.** O id do evento deriva do id do documento; o ledger reconhece o repetido.
 - **Concorrência por plano.** Sem vaga, o adaptador devolve `DEFERRED` e o worker tenta de novo em 1 s (no seu broker:
@@ -96,11 +96,11 @@ O que cada parte demonstra:
 
 - [application.yml](src/main/resources/application.yml): a rota `/api/**` para o backend do próprio demo, e tudo de
   `usage.*` (Redis, PostgreSQL, gateway, consumidor central, manutenção).
-- [DemoConfiguration](src/main/java/dev/usageplatform/demo/DemoConfiguration.java): as duas coisas que o seu gateway
+- [DemoConfiguration](src/main/java/com/example/usage/demo/DemoConfiguration.java): as duas coisas que o seu gateway
   precisa fornecer, **quem é o tenant** (aqui, pela chave de API) e **para onde vai o uso** (aqui, direto ao consumidor
   central no mesmo processo; sem broker).
-- [UpstreamController](src/main/java/dev/usageplatform/demo/UpstreamController.java): o backend atrás do gateway.
-- [DemoSmokeTest](src/test/java/dev/usageplatform/demo/DemoSmokeTest.java): sobe tudo com Redis e PostgreSQL reais e
+- [UpstreamController](src/main/java/com/example/usage/demo/UpstreamController.java): o backend atrás do gateway.
+- [DemoSmokeTest](src/test/java/com/example/usage/demo/DemoSmokeTest.java): sobe tudo com Redis e PostgreSQL reais e
   confere os cenários acima.
 
 ## Do demo para produção

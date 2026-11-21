@@ -5,7 +5,7 @@
   <modelVersion>4.0.0</modelVersion>
 
   <parent>
-    <groupId>dev.usageplatform</groupId>
+    <groupId>com.example.usage</groupId>
     <artifactId>usage-platform</artifactId>
     <version>0.1.0-SNAPSHOT</version>
   </parent>
@@ -16,11 +16,11 @@
 
   <dependencies>
     <dependency>
-      <groupId>dev.usageplatform</groupId>
+      <groupId>com.example.usage</groupId>
       <artifactId>usage-core</artifactId>
     </dependency>
     <dependency>
-      <groupId>dev.usageplatform</groupId>
+      <groupId>com.example.usage</groupId>
       <artifactId>usage-consumer</artifactId>
     </dependency>
     <!-- the two libraries are yours: install them locally first (mvn install in each) -->
@@ -39,13 +39,13 @@
     </dependency>
 
     <dependency>
-      <groupId>dev.usageplatform</groupId>
+      <groupId>com.example.usage</groupId>
       <artifactId>usage-processor</artifactId>
       <scope>test</scope>
     </dependency>
     <!-- the real-broker test: RabbitMQ through messaging-library, the outbox relay, PostgreSQL -->
     <dependency>
-      <groupId>dev.usageplatform</groupId>
+      <groupId>com.example.usage</groupId>
       <artifactId>usage-postgres</artifactId>
       <scope>test</scope>
     </dependency>

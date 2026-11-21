@@ -1,6 +1,6 @@
 # usage-platform
 
-> Nome e coordenadas Maven (`dev.usageplatform`) são provisórios.
+> Nome e coordenadas Maven (`com.example.usage`) são provisórios.
 
 Planos, cotas, limites e **medição durável de uso por tenant** para o ecossistema Java/Spring. Uma biblioteca
 que qualquer produto com essas necessidades pode embutir: ela decide se um tenant pode consumir, registra o que foi
@@ -116,10 +116,10 @@ O `usage-core` se organiza em quatro pacotes, e a dependência vai sempre no mes
 
 | Pacote | O que tem |
 |---|---|
-| `dev.usageplatform.core` | O motor (`UsageEngine`), a reconciliação de contadores e a manutenção de períodos |
-| `dev.usageplatform.core.model` | Plano, política, limite, métrica, janela, período, tenant, eventos e as respostas do motor (`Decision`, `Permit`) |
-| `dev.usageplatform.core.spi` | As interfaces que você implementa (as SPIs acima) |
-| `dev.usageplatform.core.memory` | Implementações em memória (contadores, ledger, lock) e o cache de políticas, para testes e uso de uma só instância |
+| `com.example.usage.core` | O motor (`UsageEngine`), a reconciliação de contadores e a manutenção de períodos |
+| `com.example.usage.core.model` | Plano, política, limite, métrica, janela, período, tenant, eventos e as respostas do motor (`Decision`, `Permit`) |
+| `com.example.usage.core.spi` | As interfaces que você implementa (as SPIs acima) |
+| `com.example.usage.core.memory` | Implementações em memória (contadores, ledger, lock) e o cache de políticas, para testes e uso de uma só instância |
 
 ## Início rápido (Spring Cloud Gateway)
 
@@ -127,7 +127,7 @@ Importe o BOM (`usage-bom`, instalado com `mvn install`) e declare os módulos s
 
 ```xml
 <dependencyManagement><dependencies>
-  <dependency><groupId>dev.usageplatform</groupId><artifactId>usage-bom</artifactId>
+  <dependency><groupId>com.example.usage</groupId><artifactId>usage-bom</artifactId>
     <version>0.1.0-SNAPSHOT</version><type>pom</type><scope>import</scope></dependency>
 </dependencies></dependencyManagement>
 ```
@@ -135,10 +135,10 @@ Importe o BOM (`usage-bom`, instalado com `mvn install`) e declare os módulos s
 Dependências:
 
 ```xml
-<dependency><groupId>dev.usageplatform</groupId><artifactId>usage-spring-boot-starter</artifactId></dependency>
-<dependency><groupId>dev.usageplatform</groupId><artifactId>usage-gateway</artifactId></dependency>
-<dependency><groupId>dev.usageplatform</groupId><artifactId>usage-redis</artifactId></dependency>
-<dependency><groupId>dev.usageplatform</groupId><artifactId>usage-postgres</artifactId></dependency>
+<dependency><groupId>com.example.usage</groupId><artifactId>usage-spring-boot-starter</artifactId></dependency>
+<dependency><groupId>com.example.usage</groupId><artifactId>usage-gateway</artifactId></dependency>
+<dependency><groupId>com.example.usage</groupId><artifactId>usage-redis</artifactId></dependency>
+<dependency><groupId>com.example.usage</groupId><artifactId>usage-postgres</artifactId></dependency>
 ```
 
 Cada capacidade pede o seu jar. Além dos quatro acima: `usage-processor` para consumidores de fila, `usage-consumer` para o
@@ -335,28 +335,204 @@ suba as duas bibliotecas para um repositório de artefatos e aponte o build para
 
 ## Propriedades
 
-| Propriedade | Padrão | Descrição |
-|---|---|---|
-| `usage.fail-mode` | `OPEN` | Comportamento se os stores falharem; decisões degradadas são registradas em WARNING (`dev.usageplatform.core.UsageEngine`), no máximo uma linha a cada 30 s com a contagem das omitidas; uma política inválida sai em ERROR com o motivo `invalid_policy` |
-| `usage.concurrency-lease` | `15m` | Vida de cada slot de concorrência, contada por dono |
-| `usage.policy-cache-ttl` | `1m` | Cache da política por tenant |
-| `usage.counters.type` | `redis` | `memory` só para uma instância |
-| `usage.redis.uri` / `.command-timeout` | — / `500ms` | Obrigatória com contadores Redis, a menos que você defina um `CounterStore` próprio. Um comando mais lento que o timeout falha (e o `fail-mode` decide); com o Redis desconectado, comandos falham na hora em vez de enfileirar |
-| `usage.postgres.migrate` / `.schema` | `false` / `usage` | Roda as migrations da plataforma. `schema` é o schema próprio das tabelas (identificador minúsculo); vazio usa o schema padrão da conexão |
-| `usage.gateway.enabled` / `.refund-from-status` / `.metrics[]` | `false` / `500` / — | Filtro do gateway (`code`, `mode`, `cost-header`) |
-| `usage.processor.metric` / `.countable-statuses` / `.tenant-header` / `.defer-when-over-quota` | — / — / `x-tenant-id` / `false` | Adaptador de fila |
-| `usage.consumer.enabled` / `.known-metrics` / `.max-future` / `.max-past` | `false` / — / `5m` / `90d` | Consumidor central |
-| `usage.messaging.outbox.destination` / `.transaction` | — / pelo papel | Liga o `UsageSink` sobre o seu outbox, publicando no destino dado. `OWN`: uma transação própria por mensagem (gateway); `CALLER`: na transação aberta de quem chama (processadores). Sem valor: `CALLER` se `usage.processor.metric` está definido, `OWN` caso contrário; quem é gateway **e** processador precisa dizer. `CALLER` com o gateway é **recusado no startup** (não há transação para juntar-se) e um sink `OWN` chamado dentro de uma transação **recusa** em vez de gravar (o uso sobreviveria a um rollback). `OWN` exige exatamente um `PlatformTransactionManager` |
-| `usage.messaging.inbox.enabled` / `.original-not-found-delay` / `.timeout` | `false` / `30s` / `10s` | Registra o consumidor central como handler da messaging-inbox, no bean `usageEvents`: serve o receiver `usage-events` de `messaging.receivers`. Pede `usage.consumer.enabled=true` |
-| `usage.maintenance.enabled` / `.close-tolerance` / `.settle` / `.initial-delay` / `.interval` | `false` / `24h` / `5m` / `1m` / `15m` | Fechamento e reconciliação |
+Todas vivem sob `usage.` (classe `UsageProperties`, com autocomplete na IDE). Durações aceitam o formato do Spring
+(`500ms`, `30s`, `15m`, `24h`, `90d`). Valores inválidos **falham o startup** com o nome da propriedade.
+
+### Geral
+
+| Propriedade | Tipo | Padrão | Descrição |
+|---|---|---|---|
+| `usage.fail-mode` | `OPEN` \| `CLOSED` | `OPEN` | O que fazer quando Redis ou o store de políticas estão fora. `OPEN` deixa a requisição passar (sem medir a decisão); `CLOSED` recusa (`503 store_unavailable` no gateway). Cada decisão degradada sai em WARNING (`com.example.usage.core.UsageEngine`), no máximo uma linha a cada 30 s com a contagem das omitidas. Uma política inválida sai em ERROR com o motivo `invalid_policy` |
+| `usage.concurrency-lease` | duração `> 0` | `15m` | Vida de cada slot de concorrência, contada por dono. Se o processador cai sem liberar, o slot some quando o prazo acaba. Um job mais longo que o lease perde o seu slot: aumente-o |
+| `usage.policy-cache-ttl` | duração `>= 0` | `1m` | Quanto tempo a política de um tenant fica em cache. Mudanças administrativas só valem depois do TTL, a menos que você invalide (`CachedPolicyStore.invalidate`) |
+
+### Contadores e armazenamento
+
+| Propriedade | Tipo | Padrão | Descrição |
+|---|---|---|---|
+| `usage.counters.type` | `redis` \| `memory` | `redis` | Onde ficam os contadores de decisão. `memory` conta dentro de uma JVM: serve para testes e uma instância só, nunca para cluster (loga WARN na subida) |
+| `usage.redis.uri` | URI | — | **Obrigatória** com `counters.type=redis`, a menos que exista um bean `CounterStore` ou `RedisClient` seu. Ex.: `redis://host:6379`, `rediss://...` para TLS |
+| `usage.redis.command-timeout` | duração `> 0` | `500ms` | Um comando mais lento que isso falha e o `fail-mode` decide. Com o Redis desconectado, os comandos falham na hora em vez de enfileirar. Ignorada se você declara o seu `RedisClient` |
+| `usage.postgres.migrate` | boolean | `false` | `true` roda as migrations Flyway da plataforma na subida (histórico em `<schema>.usage_schema_history`). Em produção, deixe `false` se o seu pipeline já migra |
+| `usage.postgres.schema` | identificador `[a-z_][a-z0-9_]*` | `usage` | Schema das tabelas da plataforma, criado pela migration. Vazio usa o schema padrão da conexão (então o Flyway recusa um banco que já tem tabelas sem histórico). Mudar depois de ter dados **não** move as tabelas |
+
+O `DataSource` é o do Spring (`spring.datasource.*`). Se houver mais de um, marque o da plataforma como `@Primary`.
+
+### Gateway (precisa do jar `usage-gateway`)
+
+| Propriedade | Tipo | Padrão | Descrição |
+|---|---|---|---|
+| `usage.gateway.enabled` | boolean | `false` | Liga o `UsageGatewayFilter`. Exige exatamente um bean `UsageSink` e um `TenantResolver<ServerWebExchange>` |
+| `usage.gateway.refund-from-status` | int `>= 100` | `500` | Respostas com esse status ou acima devolvem a cota (e uma exceção do upstream conta como 500). `600` desliga a devolução |
+| `usage.gateway.metrics[].code` | texto | — | Código da métrica a checar em cada requisição (precisa existir na tabela `metric`) |
+| `usage.gateway.metrics[].mode` | `ACCESS` \| `GUARD` | `ACCESS` | `ACCESS` consome a cota na entrada. `GUARD` só recusa se o tenant já estourou (para métricas de resultado, que o processador conta) |
+| `usage.gateway.metrics[].cost-header` | nome de header | — | Só `ACCESS`. Header com o custo da requisição (itens do lote). Ausente = 1; repetido, malformado, zero, negativo ou acima de 1.000.000.000 = `400 invalid_cost`. É uma afirmação do cliente |
+
+As métricas são checadas na ordem dos *guards* primeiro; se uma recusa, o que as de acesso anteriores consumiram é devolvido.
+
+### Processador (precisa do jar `usage-processor`)
+
+Ligado ao definir `usage.processor.metric`.
+
+| Propriedade | Tipo | Padrão | Descrição |
+|---|---|---|---|
+| `usage.processor.metric` | texto | — | Métrica de **resultado** (`REPORT_ONLY`) que este processador conta |
+| `usage.processor.countable-statuses` | lista | — | **Obrigatória**: status finais que geram evento de uso (ex.: `[COMPLETED]`). Qualquer outro status é gravado, mas não cobrado |
+| `usage.processor.tenant-header` | nome de header | `x-tenant-id` | Header da mensagem com o tenant. Sem ele o adaptador devolve `NO_TENANT` (vai para a DLQ) |
+| `usage.processor.defer-when-over-quota` | boolean | `false` | `true` adia (`DEFERRED`) o que chega com a cota já estourada, em vez de processar acima dela |
+
+### Consumidor central (precisa do jar `usage-consumer`)
+
+| Propriedade | Tipo | Padrão | Descrição |
+|---|---|---|---|
+| `usage.consumer.enabled` | boolean | `false` | Liga o `UsageEventConsumer` (grava ledger + resumo) |
+| `usage.consumer.known-metrics` | lista | — | **Obrigatória** quando ligado: um evento de outra métrica vai para a DLQ |
+| `usage.consumer.max-future` | duração `>= 0` | `5m` | Quanto o `occurredAt` pode estar à frente do relógio (desvio de relógio); além disso, DLQ |
+| `usage.consumer.max-past` | duração `>= 0` | `90d` | Idade máxima de um evento; além disso, DLQ em vez de cair num período fechado |
+
+### Mensageria (precisa do jar `usage-messaging`)
+
+| Propriedade | Tipo | Padrão | Descrição |
+|---|---|---|---|
+| `usage.messaging.outbox.destination` | texto | — | Liga o `UsageSink` sobre o seu outbox, publicando nesse destino. Sem ele, o `UsageSink` é seu |
+| `usage.messaging.outbox.transaction` | `OWN` \| `CALLER` | pelo papel | `OWN`: uma transação própria por mensagem, numa virtual thread (gateway, que não tem transação de negócio). `CALLER`: na transação aberta de quem chama (processador, dentro do `Persist`). Sem valor: `CALLER` se `usage.processor.metric` está definido, `OWN` caso contrário; quem é gateway **e** processador precisa dizer. `CALLER` com o gateway é recusado no startup; `OWN` chamado dentro de uma transação recusa em runtime. `OWN` exige exatamente um `PlatformTransactionManager` |
+| `usage.messaging.inbox.enabled` | boolean | `false` | Registra o consumidor como handler da messaging-inbox, no bean `usageEvents`, que serve o receiver `usage-events`. Pede `usage.consumer.enabled=true` |
+| `usage.messaging.inbox.original-not-found-delay` | duração `> 0` | `30s` | Quanto uma compensação que chegou antes do uso espera no nível de retry |
+| `usage.messaging.inbox.timeout` | duração `> 0` | `10s` | Quanto esperar o consumidor antes de tratar a entrega como falha transitória |
+
+### Manutenção
+
+| Propriedade | Tipo | Padrão | Descrição |
+|---|---|---|---|
+| `usage.maintenance.enabled` | boolean | `false` | Liga o job de fechamento de períodos e reconciliação Redis × banco, com lock: uma instância por vez |
+| `usage.maintenance.close-tolerance` | duração `>= 0` | `24h` | Quanto tempo depois do fim de um período ainda se aceitam eventos tardios antes de fechá-lo (24–72 h é razoável) |
+| `usage.maintenance.settle` | duração `>= 0` | `5m` | Quanto tempo uma linha do resumo precisa ficar quieta para a reconciliação confiar nela. Escolha bem acima da latência do consumidor e do desvio de relógio app/banco |
+| `usage.maintenance.initial-delay` | duração `>= 0` | `1m` | Espera antes da primeira execução |
+| `usage.maintenance.interval` | duração `> 0` | `15m` | Intervalo entre execuções |
 
 Cada adaptador só aparece com o seu jar no classpath. Ligar um por propriedade **sem o jar** (`usage.gateway.enabled`
 sem `usage-gateway`, `usage.consumer.enabled` sem `usage-consumer`, `usage.processor.metric` sem `usage-processor`,
 `usage.messaging.*` sem `usage-messaging`) **falha o startup** dizendo qual jar falta, em vez de rodar sem medir.
+Qualquer bean que você definir (`UsageEngine`, `CounterStore`, `PolicyStore`...) substitui o padrão.
 
-Qualquer bean que você definir (`UsageEngine`, `CounterStore`, `PolicyStore`...) substitui o padrão. Valores sem
-sentido (duração zero ou negativa onde não faz sentido, status HTTP abaixo de 100) fazem o contexto falhar no
-startup com o nome da propriedade.
+### Telemetria
+
+| Propriedade | Tipo | Padrão | Descrição |
+|---|---|---|---|
+| `usage.telemetry.enabled` | boolean | `true` | Métricas e traces pelo Micrometer, quando ele e um `MeterRegistry` estão presentes. `false` desliga (veja "Observabilidade") |
+
+### Exemplos de configuração
+
+**Desenvolvimento local / testes** (sem Redis, sem broker; só o gateway medindo em memória):
+
+```yaml
+usage:
+  counters: { type: memory }
+  postgres: { migrate: true }
+  gateway:
+    enabled: true
+    metrics: [{ code: API_REQUESTS }]
+  consumer: { enabled: true, known-metrics: [API_REQUESTS] }   # o seu UsageSink chama o consumidor no mesmo processo
+```
+
+**Gateway em produção** (uso vai para o outbox; o consumo é de outro serviço):
+
+```yaml
+usage:
+  fail-mode: CLOSED                  # produto cobrado por uso: recusar é melhor que deixar passar sem medir
+  policy-cache-ttl: 30s
+  redis: { uri: "rediss://${REDIS_HOST}:6379", command-timeout: 200ms }
+  gateway:
+    enabled: true
+    metrics:
+      - { code: API_REQUESTS, cost-header: X-Item-Count }
+      - { code: ITEMS_PROCESSED, mode: GUARD }
+  messaging:
+    outbox: { destination: usage-events }     # transaction: OWN, inferido (não há processador aqui)
+```
+
+**Serviço processador** (conta `ITEMS_PROCESSED` depois do trabalho, na transação do resultado):
+
+```yaml
+usage:
+  redis: { uri: "rediss://${REDIS_HOST}:6379" }
+  processor:
+    metric: ITEMS_PROCESSED
+    countable-statuses: [COMPLETED, APPROVED]
+    defer-when-over-quota: true
+  messaging:
+    outbox: { destination: usage-events }     # transaction: CALLER, inferido pelo processor.metric
+```
+
+**Serviço central de medição** (consome os eventos, grava o ledger e roda a manutenção):
+
+```yaml
+usage:
+  redis: { uri: "rediss://${REDIS_HOST}:6379" }
+  postgres: { migrate: true }
+  consumer:
+    enabled: true
+    known-metrics: [API_REQUESTS, ITEMS_PROCESSED]
+    max-past: 7d
+  messaging:
+    inbox: { enabled: true }
+  maintenance:
+    enabled: true
+    close-tolerance: 48h
+    interval: 10m
+```
+
+## Observabilidade (métricas e tracing)
+
+Com Micrometer no classpath e um `MeterRegistry` na aplicação (Spring Boot Actuator, por exemplo), o starter registra
+métricas e spans sozinho: nada a configurar. Sem registry, a plataforma não reporta nada (e não custa nada).
+`usage.telemetry.enabled=false` desliga mesmo com o Micrometer presente. Para outra saída, declare o seu bean
+`UsageTelemetry` (SPI do core, sem dependência de biblioteca de métricas).
+
+Cada operação é uma *observation* do Micrometer: o mesmo ponto gera o **timer** (duração e contagem) e, se a aplicação
+tem uma ponte de tracing (`micrometer-tracing`), o **span**. O `eventId` vai como atributo `usage.event.id` do span (e
+não como tag de métrica), então um evento pode ser seguido do gateway ao ledger.
+
+**Nunca há tag de tenant**: o id é ilimitado e derrubaria o seu Prometheus. Para "quem consumiu mais", use o ledger/SQL.
+A tag `metric` é o código da métrica de uso (conjunto pequeno e conhecido).
+
+| Métrica | Tipo | Tags | Quando alertar |
+|---|---|---|---|
+| `usage.check` | timer | `metric`, `result` (`allowed`/`denied`), `reason`, `overage` | `reason=store_unavailable` ou `invalid_policy` > 0 (decisões degradadas); p99 alto (é o caminho quente) |
+| `usage.acquire` | timer | idem | `reason=concurrency_exceeded` constante: lease ou concorrência mal dimensionados |
+| `usage.ingest` / `usage.compensate` | timer | `metric`, `result` (`applied`, `duplicate`, `counter_drift`, ...) | `counter_drift` > 0; `result` de compensação `already_compensated`/`invalid` |
+| `usage.consume` | timer | `disposition`, `reason` | duração do consumidor |
+| `usage.consumer.outcome` | counter | `disposition` (`ack`/`retry`/`dead_letter`), `reason` | `dead_letter` > 0; `retry` sustentado |
+| `usage.consumer.lag` | timer | — | `max` alto: o billing lê dado atrasado |
+| `usage.process` | timer | `metric`, `verdict` (`completed`/`deferred`/`denied`/`no_tenant`) | `no_tenant`/`denied` > 0; muito `deferred` |
+| `usage.gateway.event.lost` | counter | `kind` (`usage`/`refund`), `metric` | **qualquer valor > 0**: uso ou devolução perdido (sub-cobrança) |
+| `usage.gateway.refund.failed` | counter | `metric` | > 0: cota não devolvida a uma requisição recusada |
+| `usage.maintenance.run` | timer | `outcome` (`completed`/`skipped`/`failed`) | `failed` > 0 |
+| `usage.maintenance.last.success` | gauge | — | `time() - valor` maior que 2 intervalos (0 = nunca rodou) |
+| `usage.maintenance.periods.closed` | counter | — | informativo |
+| `usage.reconciler.rows` | counter | `result` (`scanned`/`repaired`/`ahead`/`skipped`/`failed`) | `repaired` alto: o Redis perde contagem; `failed` > 0 |
+| `usage.policy.cache` | counter | `result` (`hit`/`miss`) | taxa de acerto baixa |
+| `usage.policy.cache.size` | gauge | — | perto de 100.000 |
+
+(No Prometheus: `usage_check_seconds_count`, `usage_gateway_event_lost_total`, e assim por diante.)
+
+Exemplos de alerta (PromQL):
+
+```text
+sum(rate(usage_gateway_event_lost_total[5m])) > 0                                   # uso perdido
+sum(rate(usage_check_seconds_count{reason=~"store_unavailable|invalid_policy"}[5m])) > 0   # decisões degradadas
+sum(increase(usage_consumer_outcome_total{disposition="dead_letter"}[10m])) > 0     # DLQ
+time() - usage_maintenance_last_success > 2 * 900                                   # job parado (intervalo de 15m)
+```
+
+**Tracing: o que cobre e o que não.** Cada operação é um span, e um span aberto de forma síncrona vira pai dos que ele
+inicia na mesma thread (o `consume` é pai do `ingest`). Os saltos assíncronos (callbacks do Redis, a fila) **não**
+propagam o contexto sozinhos, e a mensagem do outbox não leva o `traceparent`: o trace do gateway e o do consumidor
+são traces separados, ligados pelo `usage.event.id`. Isso vem de a propagação por mensagem ser da `messaging-library`/
+`outbox-library`, não desta.
+
+O `usage-demo` expõe `/actuator/prometheus` e o `docker compose up` sobe um Prometheus em `localhost:9090` já
+raspando o demo.
 
 ## Garantias e limites de precisão
 
@@ -396,8 +572,8 @@ defesas valem. O `eventId` precisa ser determinístico por item; o horário não
   são guardados (como "sem política"), então sem o limite um fluxo de ids forjados cresceria o heap.
 - **Cache de política (invalidação)**: chame `CachedPolicyStore.invalidate` após qualquer mudança administrativa e propague entre
   instâncias; do contrário vale o TTL.
-- **Métricas e alertas**: o `MaintenanceScheduler` e o `UsageEventConsumer` devolvem resultados tipados
-  (`counter_drift`, `Failed`, `Skipped`...) para você transformar em métricas.
+- **Métricas e alertas**: veja "Observabilidade". Sem o starter, implemente `UsageTelemetry` e passe-a ao `UsageEngine`,
+  ao `MaintenanceScheduler` e ao `CachedPolicyStore`; o gateway, o processador e o consumidor a usam por `engine.telemetry()`.
 
 ## Banco de dados
 
@@ -429,7 +605,7 @@ schema, eles usam o `search_path` como antes, **mas então o Flyway migra o sche
 
 ```bash
 cd usage-platform
-mvn test            # 236 testes; Redis e PostgreSQL reais em contêineres
+mvn test            # 246 testes; Redis e PostgreSQL reais em contêineres
 mvn install         # instala os módulos no repositório local
 ```
 
