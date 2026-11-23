@@ -1,9 +1,8 @@
-package com.example.usage.admin;
+package com.example.usage.spring;
 
 import com.example.usage.admin.audit.Audit;
 import com.example.usage.admin.catalog.MetricAdmin;
 import com.example.usage.admin.catalog.PlanAdmin;
-import com.example.usage.admin.security.UsageAdminRoutes;
 import com.example.usage.admin.security.UsageAdminSecurityGuard;
 import com.example.usage.admin.support.AdminContext;
 import com.example.usage.admin.tenant.OverrideAdmin;
@@ -16,13 +15,11 @@ import com.example.usage.admin.web.CompensationController;
 import com.example.usage.admin.web.TenantWritesController;
 import com.example.usage.admin.web.TenantsController;
 import com.example.usage.admin.web.UsageController;
-
 import com.example.usage.core.UsageEngine;
 import com.example.usage.core.memory.CachedPolicyStore;
-import com.example.usage.core.model.TenantId;
 import com.example.usage.postgres.Tables;
+import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -31,10 +28,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplicat
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
-import org.springframework.core.env.Environment;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
-import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -43,44 +38,42 @@ import java.time.Clock;
 import java.util.function.Supplier;
 
 /**
- * The management API, loaded by having this jar on the classpath of a servlet application with a {@code DataSource}.
- * It works on the platform's tables in the schema {@code usage.postgres.schema} (default {@code usage}), the same one
- * the starter uses. {@code usage.admin.enabled=false} turns it off; {@code usage.admin.base-path} moves it (default
- * {@code /v1/usage}: pass the same value to {@link UsageAdminRoutes}).
+ * The management API of the usage-admin jar, in a servlet application with a {@code DataSource}: tenants, metrics, plans,
+ * subscriptions, overrides, usage search, audit trail and manual compensation. It works on the platform's tables in the schema
+ * {@code usage.postgres.schema}, and uses the starter's own {@code UsageEngine}, policy cache and ledger. Settings are {@code usage.admin.*}.
  * <p>
- * The host decides who may call it: add {@link UsageAdminRoutes} to its security chain. After a change that affects a
- * tenant the cached policy of this process is dropped; other instances see it when {@code usage.policy-cache-ttl} expires.
+ * The host decides who may call it: add {@code UsageAdminRoutes} to its security chain (the application refuses to start without one).
+ * After a change that affects a tenant the cached policy of this process is dropped; other instances see it when
+ * {@code usage.policy-cache-ttl} expires.
  */
-@AutoConfiguration(afterName = {
-        "org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration",
-        "com.example.usage.spring.UsageAutoConfiguration"})
+@Configuration(proxyBeanMethods = false)
+@ConditionalOnClass(TenantAdmin.class)
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 @ConditionalOnBean(DataSource.class)
 @ConditionalOnProperty(name = "usage.admin.enabled", havingValue = "true", matchIfMissing = true)
-@Import({TenantsController.class, CatalogController.class, UsageController.class})
-public class UsageAdminAutoConfiguration {
+@Import({TenantsController.class, CatalogController.class, UsageController.class, CompensationController.class})
+class AdminConfiguration {
 
     /**
-     * The management API changes what tenants may consume and what is billed: refuse to start without a security chain
-     * unless the application says it secures the API some other way ({@code usage.admin.allow-unsecured=true}).
+     * The API changes what tenants may consume and what is billed: refuse to start without a security chain unless the
+     * application says it secures the API some other way ({@code usage.admin.allow-unsecured=true}).
      */
     @Bean
-    UsageAdminSecurityGuard usageAdminSecurityGuard(Environment env, org.springframework.beans.factory.ListableBeanFactory beans) {
-        return UsageAdminSecurityGuard.verify(beans, env.getProperty("usage.admin.allow-unsecured", Boolean.class, false));
+    UsageAdminSecurityGuard usageAdminSecurityGuard(UsageProperties props, ListableBeanFactory beans) {
+        return UsageAdminSecurityGuard.verify(beans, props.admin().allowUnsecured());
     }
 
     @Bean
-    AdminContext usageAdminContext(ObjectProvider<DataSource> dataSources, ObjectProvider<CachedPolicyStore> cache,
-                                   ObjectProvider<Clock> clock, Environment env) {
+    AdminContext usageAdminContext(ObjectProvider<DataSource> dataSources, ObjectProvider<CachedPolicyStore> cache, Clock clock, UsageProperties props) {
         DataSource dataSource = dataSources.getIfUnique();
         if (dataSource == null) throw new IllegalStateException("usage-admin needs exactly one DataSource (or a @Primary one): it is the one holding the usage schema");
         // always its own transaction manager over this DataSource: a host's other managers (Kafka, JMS) would not cover the SQL
-        PlatformTransactionManager tm = new DataSourceTransactionManager(dataSource);
-        String schema = env.getProperty("usage.postgres.schema", "usage");
-        return new AdminContext(JdbcClient.create(dataSource), Tables.of(schema), new TransactionTemplate(tm),
-                tenant -> cache.ifAvailable(c -> c.invalidate(tenant)), clock.getIfAvailable(Clock::systemUTC));
+        return new AdminContext(JdbcClient.create(dataSource), Tables.of(props.postgres().schema()),
+                new TransactionTemplate(new DataSourceTransactionManager(dataSource)),
+                tenant -> cache.ifAvailable(c -> c.invalidate(tenant)), clock);
     }
 
+    /** The name in the token, when Spring Security is there; otherwise "unknown". Define a bean named usageAdminActor to take it from elsewhere. */
     @Bean
     @ConditionalOnMissingBean(name = "usageAdminActor")
     Supplier<String> usageAdminActor() {
@@ -110,6 +103,12 @@ public class UsageAdminAutoConfiguration {
     @Bean
     UsageQueries usageQueries(AdminContext ctx) { return new UsageQueries(ctx); }
 
+    /** Applies the reversal through the starter's engine, which the starter always creates. */
+    @Bean
+    CompensationAdmin usageCompensationAdmin(AdminContext ctx, Audit audit, UsageEngine engine, UsageQueries queries) {
+        return new CompensationAdmin(ctx, audit, engine, queries);
+    }
+
     /** Tenant creation and changes, unless the host owns them: {@code usage.admin.tenants.write=false}. */
     @Configuration(proxyBeanMethods = false)
     @ConditionalOnProperty(name = "usage.admin.tenants.write", havingValue = "true", matchIfMissing = true)
@@ -117,18 +116,6 @@ public class UsageAdminAutoConfiguration {
     static class TenantWrites {
     }
 
-    /** Manual compensation needs the platform's engine; without one the endpoint is simply not there. */
-    @Configuration(proxyBeanMethods = false)
-    @ConditionalOnBean(UsageEngine.class)
-    @Import(CompensationController.class)
-    static class Compensations {
-        @Bean
-        CompensationAdmin usageCompensationAdmin(AdminContext ctx, Audit audit, UsageEngine engine, UsageQueries queries) {
-            return new CompensationAdmin(ctx, audit, engine, queries);
-        }
-    }
-
-    /** The name in the token, when Spring Security is there; otherwise "unknown". Define a bean named usageAdminActor to take it from elsewhere. */
     static final class ActorFromSecurity {
         static Supplier<String> supplier() {
             try {

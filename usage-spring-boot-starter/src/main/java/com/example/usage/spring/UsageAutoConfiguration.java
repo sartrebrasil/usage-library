@@ -40,6 +40,7 @@ import java.util.concurrent.Executors;
         GatewayConfiguration.class,
         ProcessorConfiguration.class,
         ConsumerConfiguration.class,
+        AdminConfiguration.class,
         MissingJarFailures.class,
         OutboxSinkConfiguration.class,
         InboxHandlerConfiguration.class,

@@ -53,6 +53,11 @@
       <optional>true</optional>
     </dependency>
     <dependency>
+      <groupId>com.example.usage</groupId>
+      <artifactId>usage-admin</artifactId>
+      <optional>true</optional>
+    </dependency>
+    <dependency>
       <groupId>org.springframework</groupId>
       <artifactId>spring-tx</artifactId>
       <optional>true</optional>
@@ -118,15 +123,38 @@
       <artifactId>spring-boot-jackson</artifactId>
       <scope>test</scope>
     </dependency>
+    <!-- the management API test: MockMvc over a real PostgreSQL, with a resource-server security chain -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-webmvc-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-security-oauth2-resource-server</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.security</groupId>
+      <artifactId>spring-security-test</artifactId>
+      <scope>test</scope>
+    </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-health</artifactId>
       <scope>test</scope>
     </dependency>
+    <!-- JdbcClient and the DataSource transaction manager of the management API (AdminConfiguration); also used by the tests -->
     <dependency>
       <groupId>org.springframework</groupId>
       <artifactId>spring-jdbc</artifactId>
-      <scope>test</scope>
+      <optional>true</optional>
+    </dependency>
+    <!-- the audit trail takes the caller's name from the security context when Spring Security is there -->
+    <dependency>
+      <groupId>org.springframework.security</groupId>
+      <artifactId>spring-security-core</artifactId>
+      <optional>true</optional>
     </dependency>
     <dependency>
       <groupId>org.testcontainers</groupId>

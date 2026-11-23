@@ -1,4 +1,4 @@
-package com.example.usage.admin;
+package com.example.usage.spring;
 
 import com.example.usage.admin.tenant.TenantAdmin;
 import com.example.usage.admin.web.TenantWritesController;
@@ -16,8 +16,9 @@ import static org.mockito.Mockito.mock;
 /** The API refuses to start unprotected, and does not depend on which transaction managers the host has. */
 class UsageAdminSecurityGuardTest {
     final WebApplicationContextRunner runner = new WebApplicationContextRunner()
-            .withConfiguration(AutoConfigurations.of(UsageAdminAutoConfiguration.class))
-            .withBean(DataSource.class, () -> mock(DataSource.class));
+            .withConfiguration(AutoConfigurations.of(UsageAutoConfiguration.class))
+            .withBean(DataSource.class, () -> mock(DataSource.class))
+            .withPropertyValues("usage.counters.type=memory");
 
     @Test
     void withoutASecurityChainTheApplicationDoesNotStart() {

@@ -1,4 +1,4 @@
-package com.example.usage.admin;
+package com.example.usage.spring;
 
 import com.example.problem.ProblemSecurityHandler;
 import com.example.usage.admin.security.UsageAdminRoutes;
@@ -53,7 +53,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /** The whole API against a real PostgreSQL: roles, the journey from catalog to billing, the rules, the audit trail and the policy the engine reads. */
 @Testcontainers
-@SpringBootTest(classes = UsageAdminApiTest.App.class, properties = "spring.main.web-application-type=servlet")
+@SpringBootTest(classes = UsageAdminApiTest.App.class, properties = {"spring.main.web-application-type=servlet", "usage.counters.type=memory",
+        "usage.postgres.migrate=true", "usage.policy-cache-ttl=1h", // an hour: only an explicit invalidation can make a change visible
+        "usage.fail-mode=CLOSED", "spring.cloud.gateway.enabled=false", "spring.cloud.gateway.server.webflux.enabled=false"})
 @AutoConfigureMockMvc
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class UsageAdminApiTest {
@@ -67,8 +69,9 @@ class UsageAdminApiTest {
         r.add("spring.datasource.password", PG::getPassword);
     }
 
+    // o starter tem o usage-gateway no classpath de teste, e o Spring Cloud Gateway (WebFlux) recusa conviver com o MVC desta API
     @Configuration
-    @EnableAutoConfiguration
+    @EnableAutoConfiguration(excludeName = "org.springframework.cloud.gateway.config.GatewayClassPathWarningAutoConfiguration")
     static class App {
         @Bean
         SecurityFilterChain security(HttpSecurity http, ProblemSecurityHandler problems) {
@@ -86,21 +89,6 @@ class UsageAdminApiTest {
         @Bean
         JwtDecoder jwtDecoder() {
             return token -> { throw new BadJwtException("tests send no real token"); };
-        }
-
-        /** What the starter would wire: the platform's stores and an engine, with the policy cache the admin must invalidate. */
-        @Bean
-        CachedPolicyStore policies(DataSource ds) {
-            UsageSchema.migrate(ds, "usage");
-            return new CachedPolicyStore(new JdbcPolicyStore(ds, Executors.newVirtualThreadPerTaskExecutor(), Clock.systemUTC(), "usage"),
-                    Clock.systemUTC(), Duration.ofHours(1)); // an hour: only an explicit invalidation can make a change visible
-        }
-
-        @Bean
-        UsageEngine engine(DataSource ds, CachedPolicyStore policies) {
-            return new UsageEngine(policies, new InMemoryCounterStore(Clock.systemUTC()),
-                    new JdbcLedger(ds, Executors.newVirtualThreadPerTaskExecutor(), "usage"),
-                    message -> java.util.concurrent.CompletableFuture.completedFuture(null), Clock.systemUTC(), FailMode.CLOSED, Duration.ofMinutes(15));
         }
     }
 

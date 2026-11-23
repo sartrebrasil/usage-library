@@ -24,7 +24,8 @@ public record UsageProperties(
         @DefaultValue Consumer consumer,
         @DefaultValue Maintenance maintenance,
         @DefaultValue Messaging messaging,
-        @DefaultValue Telemetry telemetry) {
+        @DefaultValue Telemetry telemetry,
+        @DefaultValue Admin admin) {
     public UsageProperties {
         requirePositive(concurrencyLease, "usage.concurrency-lease");
         requireNotNegative(policyCacheTtl, "usage.policy-cache-ttl");
@@ -37,6 +38,23 @@ public record UsageProperties(
     private static void requireNotNegative(Duration value, String name) {
         if (value == null || value.isNegative()) throw new IllegalArgumentException(name + " must not be negative");
     }
+
+    /**
+     * The management API of the usage-admin jar (servlet applications): on by default when the jar is present.
+     *
+     * @param enabled        false turns the API off without removing the jar
+     * @param basePath       prefix of the routes; give the same value to {@code UsageAdminRoutes.apply}
+     * @param allowUnsecured the application refuses to start without a SecurityFilterChain; true says something in front of it authenticates the callers
+     */
+    public record Admin(@DefaultValue("true") boolean enabled, @DefaultValue("/v1/usage") String basePath,
+                        @DefaultValue Tenants tenants, @DefaultValue("false") boolean allowUnsecured) {
+        public Admin {
+            if (basePath == null || !basePath.startsWith("/")) throw new IllegalArgumentException("usage.admin.base-path must start with /");
+        }
+    }
+
+    /** write=false takes tenant creation and changes out of the API, for a host that owns them (the API then only lists tenants). */
+    public record Tenants(@DefaultValue("true") boolean write) {}
 
     /** enabled=false turns off the metrics and traces even when Micrometer is present. */
     public record Telemetry(@DefaultValue("true") boolean enabled) {}

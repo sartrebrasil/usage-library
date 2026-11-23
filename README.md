@@ -107,7 +107,7 @@ Duas coisas que o billing precisa saber antes de ler a tabela:
 | `usage-messaging` | Liga a plataforma a um broker pela **sua** `messaging-library` (inbox) e `outbox-library`: um handler da inbox e um `UsageSink` sobre o outbox. Não tem código de broker | core, consumer, `messaging-inbox`, `outbox-core` |
 | `usage-bom` | Só as versões de todos os módulos, para importar (sem pai, sem o BOM do Boot) | — |
 | `usage-demo` | Aplicação Spring Cloud Gateway pronta para rodar, com docker-compose; veja [usage-demo/README.md](usage-demo/README.md) | o starter e os adaptadores |
-| `usage-admin` | API de gestão (Spring MVC): manutenção, listagem e pesquisa, auditoria e compensação manual; auto-configurada. Veja "API de gestão" | core, postgres |
+| `usage-admin` | API de gestão (Spring MVC): manutenção, listagem e pesquisa, auditoria e compensação manual. Biblioteca simples: quem a liga é o starter (`usage.admin.*`). Veja "API de gestão" | core, postgres |
 | `usage-spring-boot-starter` | Auto-configuração a partir de propriedades `usage.*` | os acima (opcionais) |
 
 As SPIs do core (`PolicyStore`, `CounterStore`, `Ledger`, `SummaryStore`, `UsageSink`, `TenantResolver`,
@@ -422,6 +422,10 @@ Qualquer bean que você definir (`UsageEngine`, `CounterStore`, `PolicyStore`...
 |---|---|---|---|
 | `usage.telemetry.enabled` | boolean | `true` | Métricas e traces pelo Micrometer, quando ele e um `MeterRegistry` estão presentes. `false` desliga (veja "Observabilidade") |
 
+### API de gestão (precisa dos jars `usage-admin` e `usage-postgres`)
+
+`usage.admin.enabled`, `.base-path`, `.tenants.write` e `.allow-unsecured`: descritas na seção "API de gestão (`usage-admin`)". São do starter, como as demais.
+
 ### Exemplos de configuração
 
 **Desenvolvimento local / testes** (sem Redis, sem broker; só o gateway medindo em memória):
@@ -485,11 +489,13 @@ usage:
 
 ## API de gestão (`usage-admin`)
 
-Módulo Spring **WebMVC** com os endpoints de manutenção, listagem e pesquisa. Quem declara a dependência recebe os
-endpoints (auto-configuração), sem escanear pacote nem declarar bean:
+Módulo Spring **WebMVC** com os endpoints de manutenção, listagem e pesquisa. Como os demais adaptadores, é uma biblioteca simples e **quem a liga é o
+`usage-spring-boot-starter`**: com o starter e o jar na aplicação, os endpoints existem, sem escanear pacote nem declarar bean:
 
 ```xml
+<dependency><groupId>com.example.usage</groupId><artifactId>usage-spring-boot-starter</artifactId></dependency>
 <dependency><groupId>com.example.usage</groupId><artifactId>usage-admin</artifactId></dependency>
+<dependency><groupId>com.example.usage</groupId><artifactId>usage-postgres</artifactId></dependency>
 ```
 
 Condições: aplicação servlet e **um** `DataSource` (as tabelas ficam no schema `usage.postgres.schema`, o mesmo do starter; com
@@ -564,17 +570,18 @@ Aqui a auditoria é gravada logo **depois** do ledger, não na mesma transação
 
 ### Como usar, passo a passo
 
-**1. Dependência.** O módulo se auto-configura; não há anotação nem `@Import`:
+**1. Dependência.** O starter liga o módulo; não há anotação nem `@Import`:
 
 ```xml
+<dependency><groupId>com.example.usage</groupId><artifactId>usage-spring-boot-starter</artifactId></dependency> <!-- liga o módulo; UsageEngine, cache de política, migrations -->
 <dependency><groupId>com.example.usage</groupId><artifactId>usage-admin</artifactId></dependency>
-<dependency><groupId>com.example.usage</groupId><artifactId>usage-spring-boot-starter</artifactId></dependency> <!-- UsageEngine, cache de política, migrations -->
 <dependency><groupId>com.example.usage</groupId><artifactId>usage-postgres</artifactId></dependency>
 <dependency><groupId>com.example.usage</groupId><artifactId>usage-redis</artifactId></dependency>           <!-- contadores: necessário para a compensação devolver a cota -->
 ```
 
-O mínimo para só gerir e consultar é o `usage-admin` com um `DataSource`. O `UsageEngine` (starter + Redis) só é preciso para a
-compensação manual; sem ele a rota `POST /compensations` simplesmente não existe.
+O starter sempre cria o `UsageEngine`, então a compensação manual (`POST /compensations`) existe sempre que a API existe. Ele pede um `CounterStore`: Redis
+(`usage-redis` e `usage.redis.uri`) quando a plataforma decide a cota, ou `usage.counters.type=memory` quando ela só gere e mede e a decisão é de outro (o contador em memória
+nunca é lido, e o aviso do starter sobre "mais de uma instância" não vale nesse caso). Ligar `usage.admin.enabled=true` sem o jar do módulo faz a aplicação falhar na subida.
 
 **2. Banco.** O módulo **não roda migrations**. As tabelas (a migration `V202611190001__usage_core.sql`) precisam existir no schema `usage.postgres.schema`
 (padrão `usage`): com o starter, `usage.postgres.migrate=true`; em um pipeline próprio, `UsageSchema.migrate(dataSource, "usage")`
@@ -671,7 +678,7 @@ curl "$U/audit?tenantId=acme&from=2026-11-01T00:00:00Z" "${H[@]}"
 
 Pacotes do módulo (`com.example.usage.admin`): `web` (controllers e erros), `tenant` (tenants, assinaturas, overrides),
 `catalog` (métricas, planos, limites), `usage` (pesquisa de uso e compensação), `audit`, `security` (`UsageAdminRoutes`,
-`UsageAdminRoles`) e `support` (paginação, filtros, validação, contexto). A auto-configuração fica na raiz.
+`UsageAdminRoles`) e `support` (paginação, filtros, validação, contexto). A ligação (beans e condições) fica no starter, em `AdminConfiguration`.
 
 Erros usam o formato padrão da casa, do `problem-spring-boot-starter` (RFC 9457, `application/problem+json`), que o módulo
 traz como dependência: o advice global do starter responde, e os serviços só lançam `ApiException` com um `code` estável.

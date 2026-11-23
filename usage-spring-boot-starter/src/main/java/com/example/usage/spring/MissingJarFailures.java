@@ -51,6 +51,13 @@ class MissingJarFailures {
         throw missing("usage.messaging.inbox.enabled=true", "usage-messaging");
     }
 
+    @Bean
+    @ConditionalOnProperty(name = "usage.admin.enabled", havingValue = "true") // only when asked for: with no property the API is simply absent without its jar
+    @ConditionalOnMissingClass("com.example.usage.admin.tenant.TenantAdmin")
+    Object usageAdminJarMissing() {
+        throw missing("usage.admin.enabled=true", "usage-admin");
+    }
+
     private static IllegalStateException missing(String property, String jar) {
         return new IllegalStateException(property + " needs the " + jar + " jar on the classpath, and it is not there");
     }
