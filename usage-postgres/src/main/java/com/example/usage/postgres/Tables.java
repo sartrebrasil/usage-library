@@ -14,11 +14,11 @@ import java.util.regex.Pattern;
  * The schema name comes from configuration and goes into SQL text, so it must be a plain lowercase identifier:
  * anything else is refused instead of escaped.
  */
-final class Tables {
+public final class Tables {
     private static final Pattern IDENTIFIER = Pattern.compile("[a-z_][a-z0-9_]{0,62}");
     private static final List<String> NAMES = List.of(
             "tenant", "metric", "plan", "plan_limit", "tenant_subscription", "tenant_plan", "tenant_limit_override",
-            "usage_event", "usage_event_id", "usage_event_slot", "usage_compensation", "usage_summary");
+            "usage_event", "usage_event_id", "usage_event_slot", "usage_compensation", "usage_summary", "usage_audit");
 
     private final String prefix;
     private final Map<String, String> resolved = new ConcurrentHashMap<>();
@@ -28,19 +28,19 @@ final class Tables {
     }
 
     /** @param schema null or blank for "no schema": the tables are found through the search_path. */
-    static Tables of(String schema) {
+    public static Tables of(String schema) {
         if (schema == null || schema.isBlank()) return new Tables("");
         validate(schema);
         return new Tables("\"" + schema + "\".");
     }
 
-    static void validate(String schema) {
+    public static void validate(String schema) {
         if (!IDENTIFIER.matcher(schema).matches()) {
             throw new IllegalArgumentException("schema must be a lowercase identifier (letters, digits, underscore), got: " + schema);
         }
     }
 
-    String sql(String template) {
+    public String sql(String template) {
         return resolved.computeIfAbsent(template, t -> {
             String out = t;
             for (String name : NAMES) out = out.replace("{" + name + "}", prefix + name);

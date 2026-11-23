@@ -107,6 +107,7 @@ Duas coisas que o billing precisa saber antes de ler a tabela:
 | `usage-messaging` | Liga a plataforma a um broker pela **sua** `messaging-library` (inbox) e `outbox-library`: um handler da inbox e um `UsageSink` sobre o outbox. Não tem código de broker | core, consumer, `messaging-inbox`, `outbox-core` |
 | `usage-bom` | Só as versões de todos os módulos, para importar (sem pai, sem o BOM do Boot) | — |
 | `usage-demo` | Aplicação Spring Cloud Gateway pronta para rodar, com docker-compose; veja [usage-demo/README.md](usage-demo/README.md) | o starter e os adaptadores |
+| `usage-admin` | API de gestão (Spring MVC): manutenção, listagem e pesquisa, auditoria e compensação manual; auto-configurada. Veja "API de gestão" | core, postgres |
 | `usage-spring-boot-starter` | Auto-configuração a partir de propriedades `usage.*` | os acima (opcionais) |
 
 As SPIs do core (`PolicyStore`, `CounterStore`, `Ledger`, `SummaryStore`, `UsageSink`, `TenantResolver`,
@@ -482,6 +483,90 @@ usage:
     interval: 10m
 ```
 
+## API de gestão (`usage-admin`)
+
+Módulo Spring **WebMVC** com os endpoints de manutenção, listagem e pesquisa. Quem declara a dependência recebe os
+endpoints (auto-configuração), sem escanear pacote nem declarar bean:
+
+```xml
+<dependency><groupId>com.example.usage</groupId><artifactId>usage-admin</artifactId></dependency>
+```
+
+Condições: aplicação servlet e **um** `DataSource` (as tabelas ficam no schema `usage.postgres.schema`, o mesmo do starter; com
+mais de um, marque o certo como `@Primary`). O módulo usa um gerenciador de transação próprio sobre esse `DataSource`, então não
+depende dos `PlatformTransactionManager` do host (Kafka, JMS...). O
+módulo **não autentica**: o host valida o token e o módulo só diz qual role cada rota exige (próxima seção).
+
+| Propriedade | Padrão | Descrição |
+|---|---|---|
+| `usage.admin.enabled` | `true` | `false` desliga a API mesmo com o jar no classpath |
+| `usage.admin.base-path` | `/v1/usage` | Prefixo das rotas. Passe o mesmo valor a `UsageAdminRoutes.apply` |
+| `usage.admin.allow-unsecured` | `false` | A aplicação **não sobe** sem um `SecurityFilterChain` (a API altera cobrança e o módulo não autentica ninguém). `true` só para quando algo na frente da aplicação já autentica, e loga um aviso |
+
+### Roles
+
+Padrão `<domínio>:<ação>`, como as do engine. São roles de **plataforma**: nunca as dê a um client de tenant.
+
+| Role | Dá acesso a |
+|---|---|
+| `usage:read` | Todo `GET`: listagens, pesquisas, resumo de uso, eventos e auditoria |
+| `usage:write` | `POST`/`PUT`/`PATCH`/`DELETE` de tenants, métricas, planos, limites, assinaturas e overrides |
+| `usage:compensate` | `POST /compensations`: altera o que será cobrado, por isso é separada |
+
+O host aplica as regras na **sua** cadeia de segurança (o módulo não cria uma, para não perder o formato de erro e a
+validação de token do host). Uma linha, antes da regra que nega o resto:
+
+```java
+SecurityFilterChain security(HttpSecurity http) {
+    return ApiSecurity.chain(http, routes -> {
+        routes.requestMatchers("/v1/tenants/**").hasAuthority("tenant:admin");
+        UsageAdminRoutes.apply(routes, "/v1/usage");      // usage:read / usage:write / usage:compensate
+    });
+}
+```
+
+O ator da auditoria é o `Authentication.getName()` do token. Para tirá-lo de outro lugar, declare um bean
+`Supplier<String>` chamado `usageAdminActor`.
+
+### Endpoints (prefixo `/v1/usage`)
+
+**Só leitura** (`usage:read`). Toda lista é paginada (`page` de 0, `size` de 1 a 200; resposta
+`{items, page, size, hasNext}`). `page * size` passa de 100.000 é recusado (`INVALID_PAGE`): restrinja os filtros.
+
+| Rota | Filtros |
+|---|---|
+| `GET /summaries` | `tenantId`, `metric`, `windowKey`, `status`, `from`, `to` (início do período). Traz `net = total + lateTotal − credits` |
+| `GET /events` · `GET /events/{id}` | `tenantId`, `metric`, `type` (`USAGE`/`COMPENSATION`), `from`, `to`. **Exige `tenantId` ou `from`**: o ledger é grande demais para listar sem filtro. O detalhe mostra `compensatedBy` |
+| `GET /audit` | `entityType`, `entityId`, `tenantId`, `actor`, `from`, `to`; traz o antes e o depois de cada mudança |
+
+**Manutenção** (`usage:write`)
+
+| Rota | Operação | Regras |
+|---|---|---|
+| `GET/POST /tenants`, `GET/PATCH /tenants/{id}` | listar (`q`, `status`), criar, alterar nome e status | id `[a-z0-9][a-z0-9-]{1,62}`; **sem DELETE**: suspenda (`SUSPENDED`) |
+| `GET/POST /metrics`, `GET/PATCH /metrics/{id}` | listar (`q`), criar, alterar descrição/unidade | `code` `[A-Z][A-Z0-9_]{1,59}` imutável; `countTrigger` não muda depois que a métrica teve uso no ledger (`METRIC_HAS_USAGE`). Limite: não enxerga eventos ainda em trânsito (outbox/broker) nem contadores no Redis, e a mudança só chega às políticas em cache depois do TTL: faça-a antes de a métrica entrar em uso |
+| `GET/POST /plans`, `GET/PATCH /plans/{id}` | listar (`code`, `status`), criar, alterar nome e status (`DEPRECATED`) | criar com um `code` existente gera a **próxima versão** |
+| `POST /plans/{id}/clone` | próxima versão com os limites copiados | o caminho para mudar um plano que já tem assinante |
+| `GET/POST /plans/{id}/limits`, `PUT/DELETE /plans/{id}/limits/{limitId}` | gerir limites (`metric`, `type`, `value`, `windowSeconds` ou `windowMonths`, `enforcement`) | só em plano **sem uso** (`PLAN_IN_USE`); as regras do core valem (RATE só em métrica de acesso, só QUOTA aceita `ALLOW_OVERAGE`) |
+| `GET/POST /tenants/{id}/subscriptions`, `DELETE /tenants/{id}/subscriptions/open` | assinar (`planCode`, `planVersion`, `startsAt`), encerrar | `startsAt` é a âncora do ciclo; o encerramento (`at`) também não pode ser futuro e tem de ser depois do início do plano em vigor; uma assinatura aberta por tenant; plano `DEPRECATED` é recusado |
+| `GET /tenants/{id}/plans`, `PUT /tenants/{id}/plan` | histórico, **trocar de plano** | troca os limites e mantém ciclo e contadores do período. O `at` é agora ou passado: data futura é recusada (`FUTURE_NOT_SUPPORTED`) |
+| `GET/POST /tenants/{id}/overrides`, `PUT/DELETE .../{overrideId}` | exceção de limite de um tenant | `reason` obrigatório; termina junto com o plano |
+
+**Compensação** (`usage:compensate`): `POST /compensations` com `{originalEventId, quantity?, reason}`. É aplicada **na
+hora**, pelo `UsageEngine`, sem broker nem outbox: a resposta diz o resultado (`APPLIED`, `DUPLICATE`, `COUNTER_DRIFT`).
+`quantity` padrão é o original inteiro. Repetir o mesmo pedido é inofensivo: devolve o que está gravado (não a quantidade do novo pedido) e completa a auditoria se a primeira tentativa a perdeu. A rota só existe se a aplicação tem um
+`UsageEngine`, e os contadores se movem pelo `CounterStore` do host (com Redis, a cota volta na hora; sem conseguir
+mover o contador, o reconciliador repara métricas de resultado, mas o de uma métrica de acesso só desce ao fim do período).
+Aqui a auditoria é gravada logo **depois** do ledger, não na mesma transação (o ledger é do motor); por isso a repetição a completa.
+
+Erros são `application/problem+json` com um `code` estável (`TENANT_NOT_FOUND`, `PLAN_IN_USE`, `ALREADY_SUBSCRIBED`,
+`FILTER_REQUIRED`...). Toda escrita grava em `usage_audit` **na mesma transação** da mudança; a tabela é só de
+inclusão (um gatilho recusa `UPDATE` e `DELETE`).
+
+**Cache de política.** Depois de qualquer escrita que afeta um tenant, o módulo invalida o `CachedPolicyStore` do próprio
+processo. As outras instâncias (gateway, processadores) só enxergam a mudança quando o `usage.policy-cache-ttl`
+(1 min por padrão) vence.
+
 ## Observabilidade (métricas e tracing)
 
 Com Micrometer no classpath e um `MeterRegistry` na aplicação (Spring Boot Actuator, por exemplo), o starter registra
@@ -577,10 +662,41 @@ defesas valem. O `eventId` precisa ser determinístico por item; o horário não
 
 ## Banco de dados
 
-Migrations em `usage-postgres/src/main/resources/db/usage/` (`V1__usage_core.sql` e `V2__event_id_gate_and_indexes.sql`). **O V1 está congelado** (um teste confere o seu checksum): toda mudança de schema entra como um novo `V<n>`. Tabelas: `tenant`, `metric`, `plan`,
-`plan_limit` (janela fixa em segundos ou mensal em meses), `tenant_subscription`, `tenant_plan`,
-`tenant_limit_override`, `usage_event` (particionada por `occurred_at`), `usage_event_id` (o dedup por id), `usage_event_slot` (em quais janelas cada evento foi
-contado, para a compensação reverter exatamente isso), `usage_compensation`, `usage_summary`.
+Migrations em `usage-postgres/src/main/resources/db/usage/` (`V1__usage_core.sql`, `V2__event_id_gate_and_indexes.sql` e `V3__usage_audit.sql`). **O V1 está congelado** (um teste confere o seu checksum): toda mudança de schema entra como um novo `V<n>`. São 13 tabelas, em três grupos: **catálogo** (o que existe), **contratação** (quem assinou o quê) e **medição** (o que foi consumido).
+
+**Catálogo** (cadastrado pelo seu sistema)
+
+| Tabela | O que é | Para que serve |
+|---|---|---|
+| `tenant` | O cliente (empresa/conta) | Dono de tudo; `ACTIVE` ou `SUSPENDED`. O id é texto livre, o que o seu sistema usar |
+| `metric` | O que se mede (`API_REQUESTS`, `ITEMS_PROCESSED`) | Define a unidade e *quando* conta: `ON_REQUEST` (na entrada) ou `ON_FINAL_STATUS` (quando o processamento termina) |
+| `plan` | Um plano versionado (`PRO` v1, `PRO` v2) | Agrupa limites; mudar um plano cria uma versão nova, sem alterar a antiga |
+| `plan_limit` | Uma regra de um plano para uma métrica | Tipo (`RATE`, `QUOTA`, `CONCURRENCY`), valor, janela (segundos ou meses) e o que fazer ao estourar (`REJECT` ou `ALLOW_OVERAGE`). Ex.: "PRO: 1000 requisições por dia" |
+
+**Contratação**
+
+| Tabela | O que é | Para que serve |
+|---|---|---|
+| `tenant_subscription` | A assinatura do tenant | Guarda o **ciclo de cobrança** (`cycle_anchor`: dia e hora em que os períodos começam). Uma só aberta por tenant. Trocar de plano não mexe nela, então o período em curso continua |
+| `tenant_plan` | Qual plano o tenant tem, ao longo do tempo | Histórico de trocas (`valid_from`/`valid_to`); um só em vigor por tenant |
+| `tenant_limit_override` | Exceção de limite para um tenant | Ex.: "este cliente tem 5000 em vez de 1000". Fica ligada ao `tenant_plan`, então termina junto com o plano |
+
+**Medição**
+
+| Tabela | O que é | Para que serve |
+|---|---|---|
+| `usage_event` | O livro-razão: cada consumo ou estorno | Fonte da verdade, imutável, particionada por `occurred_at`. Tipo `USAGE` ou `COMPENSATION` |
+| `usage_event_id` | Ids de eventos já vistos | **Anti-duplicidade**: o mesmo evento entregue de novo é ignorado, mesmo com outro horário. Limpa com `JdbcRetention` |
+| `usage_event_slot` | Em quais períodos cada evento foi somado | Permite ao estorno desfazer **exatamente** o que o evento somou, mesmo que os limites tenham mudado |
+| `usage_compensation` | Quais eventos já foram estornados | Garante que um consumo seja estornado **uma vez** |
+| `usage_summary` | Total por tenant, métrica, janela e período | **É o que o billing lê**: `total`, `late_total`, `credits` e o plano em vigor |
+| `usage_audit` | Quem mudou o quê, antes e depois | Escrita pela `usage-admin` na mesma transação da mudança; só de inclusão (um gatilho recusa `UPDATE`/`DELETE`) |
+
+Como se encaixam: o `check` decide pelo `plan_limit` do plano atual (cache e Redis); o evento entra em `usage_event`
+protegido pelo `usage_event_id`, e no mesmo momento o `usage_summary` é atualizado e o `usage_event_slot` anota onde; um
+estorno consulta `usage_event_slot` e `usage_compensation` e ajusta o `usage_summary`. O Redis guarda só contadores para
+decidir rápido: o que vale para cobrança é o banco.
+
 Os ids de tenant são `TEXT`.
 
 **Schema próprio.** Por padrão as tabelas ficam no schema `usage` (`usage.tenant`, `usage.usage_summary`...), com o
@@ -605,7 +721,7 @@ schema, eles usam o `search_path` como antes, **mas então o Flyway migra o sche
 
 ```bash
 cd usage-platform
-mvn test            # 246 testes; Redis e PostgreSQL reais em contêineres
+mvn test            # 263 testes; Redis e PostgreSQL reais em contêineres
 mvn install         # instala os módulos no repositório local
 ```
 
@@ -646,7 +762,7 @@ mvn install         # instala os módulos no repositório local
 - Mudar `usage.postgres.schema` depois de ter dados não move as tabelas: é outro conjunto vazio no schema novo.
 - O reconciliador carrega todas as linhas abertas de uma vez; pagine antes de chegar a milhões de linhas.
 - Tudo em UTC. Redis Cluster e carga concorrente alta não foram testados.
-- Sem tabelas de provedores de identidade, API de administração, auditoria de mudanças ou painel.
+- Sem tabelas de provedores de identidade nem painel. A API de gestão é o `usage-admin`.
 - Auto-configuração e starter são um jar só.
 
 ## Decisões em aberto

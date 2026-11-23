@@ -22,6 +22,7 @@
       <dependency><groupId>com.example.usage</groupId><artifactId>usage-redis</artifactId><version>${project.version}</version></dependency>
       <dependency><groupId>com.example.usage</groupId><artifactId>usage-postgres</artifactId><version>${project.version}</version></dependency>
       <dependency><groupId>com.example.usage</groupId><artifactId>usage-messaging</artifactId><version>${project.version}</version></dependency>
+      <dependency><groupId>com.example.usage</groupId><artifactId>usage-admin</artifactId><version>${project.version}</version></dependency>
       <dependency><groupId>com.example.usage</groupId><artifactId>usage-spring-boot-starter</artifactId><version>${project.version}</version></dependency>
     </dependencies>
   </dependencyManagement>

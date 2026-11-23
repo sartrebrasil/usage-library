@@ -18,6 +18,7 @@
     <module>usage-redis</module>
     <module>usage-postgres</module>
     <module>usage-messaging</module>
+    <module>usage-admin</module>
     <module>usage-spring-boot-starter</module>
     <module>usage-demo</module>
   </modules>
