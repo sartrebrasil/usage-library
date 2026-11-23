@@ -388,7 +388,7 @@ Ligado ao definir `usage.processor.metric`.
 | Propriedade | Tipo | Padrão | Descrição |
 |---|---|---|---|
 | `usage.consumer.enabled` | boolean | `false` | Liga o `UsageEventConsumer` (grava ledger + resumo) |
-| `usage.consumer.known-metrics` | lista | — | **Obrigatória** quando ligado: um evento de outra métrica vai para a DLQ |
+| `usage.consumer.known-metrics` / `.known-metric-prefixes` | lista | — | **Pelo menos uma das duas** quando ligado: um evento de outra métrica vai para a DLQ. O prefixo (`DOCUMENTS_`) aceita toda métrica que comece com ele: uma família que cresce (uma por modelo) não pede mudança de configuração a cada novo membro |
 | `usage.consumer.max-future` | duração `>= 0` | `5m` | Quanto o `occurredAt` pode estar à frente do relógio (desvio de relógio); além disso, DLQ |
 | `usage.consumer.max-past` | duração `>= 0` | `90d` | Idade máxima de um evento; além disso, DLQ em vez de cair num período fechado |
 

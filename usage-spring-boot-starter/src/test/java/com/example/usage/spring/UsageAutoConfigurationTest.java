@@ -254,6 +254,23 @@ class UsageAutoConfigurationTest {
     }
 
     @Test
+    void aMetricPrefixAcceptsAFamilyOfMetrics() {
+        runner.withPropertyValues("usage.consumer.enabled=true", "usage.consumer.known-metric-prefixes=DOCUMENTS_,EVENTS_", "usage.consumer.known-metrics=DOCUMENTS")
+                .run(ctx -> {
+                    var consumer = ctx.getBean(UsageEventConsumer.class);
+                    TenantId t = new TenantId("acme");
+                    for (String metric : List.of("DOCUMENTS", "DOCUMENTS_NFE", "DOCUMENTS_MDFE", "EVENTS_CTE")) {
+                        String body = com.example.usage.consumer.UsageEventJson.toJson(new com.example.usage.core.model.UsageEvent(
+                                java.util.UUID.randomUUID(), t, metric, 1, Instant.now()));
+                        assertThat(consumer.handle(body).toCompletableFuture().join().reason()).as(metric).isNotEqualTo("unknown_metric");
+                    }
+                    String other = com.example.usage.consumer.UsageEventJson.toJson(new com.example.usage.core.model.UsageEvent(
+                            java.util.UUID.randomUUID(), t, "OTHER_THING", 1, Instant.now()));
+                    assertThat(consumer.handle(other).toCompletableFuture().join().reason()).isEqualTo("unknown_metric");
+                });
+    }
+
+    @Test
     void theCentralConsumerNeedsItsKnownMetrics() {
         runner.withPropertyValues("usage.consumer.enabled=true", "usage.consumer.known-metrics=API_REQUESTS,ITEMS_PROCESSED")
                 .run(ctx -> assertThat(ctx).hasSingleBean(UsageEventConsumer.class));

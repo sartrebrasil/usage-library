@@ -23,8 +23,10 @@ class ConsumerConfiguration {
     @ConditionalOnMissingBean
     UsageEventConsumer usageEventConsumer(UsageEngine engine, Clock clock, UsageProperties props) {
         UsageProperties.Consumer c = props.consumer();
-        Assert.notEmpty(c.knownMetrics(), "usage.consumer.known-metrics must list the metric codes the consumer accepts");
+        Assert.state(!c.knownMetrics().isEmpty() || !c.knownMetricPrefixes().isEmpty(),
+                "usage.consumer.known-metrics (or known-metric-prefixes) must list the metric codes the consumer accepts");
         Set<String> known = new HashSet<>(c.knownMetrics());
-        return new UsageEventConsumer(engine, known::contains, clock, c.maxFuture(), c.maxPast());
+        var prefixes = c.knownMetricPrefixes();
+        return new UsageEventConsumer(engine, metric -> known.contains(metric) || prefixes.stream().anyMatch(metric::startsWith), clock, c.maxFuture(), c.maxPast());
     }
 }

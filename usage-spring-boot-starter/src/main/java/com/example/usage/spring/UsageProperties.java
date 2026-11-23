@@ -156,13 +156,18 @@ public record UsageProperties(
         }
     }
 
-    /** knownMetrics is required when enabled: an event for any other metric is dead-lettered. */
-    public record Consumer(@DefaultValue("false") boolean enabled, List<String> knownMetrics,
+    /**
+     * At least one of knownMetrics or knownMetricPrefixes is required when enabled: an event for any other metric is dead-lettered.
+     * A prefix ({@code DOCUMENTS_}) accepts every metric that starts with it, so a family that grows (one metric per model) needs no
+     * change here when a new member appears.
+     */
+    public record Consumer(@DefaultValue("false") boolean enabled, List<String> knownMetrics, List<String> knownMetricPrefixes,
                            @DefaultValue("5m") Duration maxFuture, @DefaultValue("90d") Duration maxPast) {
         public Consumer {
             requireNotNegative(maxFuture, "usage.consumer.max-future");
             requireNotNegative(maxPast, "usage.consumer.max-past");
             knownMetrics = knownMetrics == null ? List.of() : List.copyOf(knownMetrics);
+            knownMetricPrefixes = knownMetricPrefixes == null ? List.of() : List.copyOf(knownMetricPrefixes);
         }
     }
 
