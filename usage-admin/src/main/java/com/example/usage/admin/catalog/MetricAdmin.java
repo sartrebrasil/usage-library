@@ -2,7 +2,7 @@ package com.example.usage.admin.catalog;
 
 import com.example.usage.admin.audit.Audit;
 import com.example.usage.admin.support.AdminContext;
-import com.example.usage.admin.support.AdminException;
+import com.example.problem.ApiException;
 import com.example.usage.admin.support.Check;
 import com.example.usage.admin.support.Page;
 import com.example.usage.admin.support.Where;
@@ -39,16 +39,20 @@ public final class MetricAdmin {
 
     public View create(Create in) {
         if (in == null || in.code() == null || !CODE.matcher(in.code()).matches()) {
-            throw AdminException.invalid("INVALID_METRIC_CODE", "code must match " + CODE.pattern());
+            throw ApiException.badRequest("INVALID_METRIC_CODE", "code must match " + CODE.pattern());
         }
         String unit = Check.text(in.unit(), "unit", 30);
         String description = Check.optionalText(in.description(), "description", 200);
         String trigger = in.countTrigger() == null ? "ON_REQUEST" : Check.oneOf(in.countTrigger(), TRIGGERS, "countTrigger");
         return ctx.inTx(() -> {
             UUID id = UUID.randomUUID();
-            ctx.jdbc().sql(ctx.sql("INSERT INTO {metric} (id, code, description, unit, count_trigger) VALUES (:id, :code, :description, :unit, :trigger)"))
-                    .param("id", id).param("code", in.code()).param("description", description, java.sql.Types.VARCHAR)
-                    .param("unit", unit).param("trigger", trigger).update();
+            try {
+                ctx.jdbc().sql(ctx.sql("INSERT INTO {metric} (id, code, description, unit, count_trigger) VALUES (:id, :code, :description, :unit, :trigger)"))
+                        .param("id", id).param("code", in.code()).param("description", description, java.sql.Types.VARCHAR)
+                        .param("unit", unit).param("trigger", trigger).update();
+            } catch (org.springframework.dao.DuplicateKeyException e) {
+                throw ApiException.conflict("METRIC_EXISTS", "metric " + in.code() + " already exists");
+            }
             View created = get(id);
             audit.record("CREATE", "metric", id, null, null, created, null);
             return created;
@@ -57,13 +61,13 @@ public final class MetricAdmin {
 
     public View update(UUID id, Update in) {
         if (in == null || (in.description() == null && in.unit() == null && in.countTrigger() == null)) {
-            throw AdminException.invalid("NOTHING_TO_UPDATE", "give description, unit or countTrigger");
+            throw ApiException.badRequest("NOTHING_TO_UPDATE", "give description, unit or countTrigger");
         }
         return ctx.inTx(() -> {
             View before = get(id);
             String trigger = in.countTrigger() == null ? before.countTrigger() : Check.oneOf(in.countTrigger(), TRIGGERS, "countTrigger");
             if (!trigger.equals(before.countTrigger()) && hasUsage(before.code())) {
-                throw AdminException.conflict("METRIC_HAS_USAGE", "countTrigger cannot change: usage was already recorded for " + before.code());
+                throw ApiException.conflict("METRIC_HAS_USAGE", "countTrigger cannot change: usage was already recorded for " + before.code());
             }
             ctx.jdbc().sql(ctx.sql("UPDATE {metric} SET description = :description, unit = :unit, count_trigger = :trigger WHERE id = :id"))
                     .param("description", in.description() == null ? before.description() : Check.text(in.description(), "description", 200), java.sql.Types.VARCHAR)
@@ -77,7 +81,7 @@ public final class MetricAdmin {
 
     public View get(UUID id) {
         return ctx.jdbc().sql(ctx.sql(SELECT + " WHERE id = :id")).param("id", id).query(MetricAdmin::view).optional()
-                .orElseThrow(() -> AdminException.notFound("METRIC_NOT_FOUND", "metric " + id + " does not exist"));
+                .orElseThrow(() -> ApiException.notFound("METRIC_NOT_FOUND", "metric " + id + " does not exist"));
     }
 
     public Page<View> list(String q, Page.Request page) {

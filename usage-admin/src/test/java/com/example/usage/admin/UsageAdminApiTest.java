@@ -1,5 +1,6 @@
 package com.example.usage.admin;
 
+import com.example.problem.ProblemSecurityHandler;
 import com.example.usage.admin.security.UsageAdminRoutes;
 import com.example.usage.core.UsageEngine;
 import com.example.usage.core.UsageEngine.FailMode;
@@ -70,13 +71,15 @@ class UsageAdminApiTest {
     @EnableAutoConfiguration
     static class App {
         @Bean
-        SecurityFilterChain security(HttpSecurity http) {
+        SecurityFilterChain security(HttpSecurity http, ProblemSecurityHandler problems) {
+            // as the engine's ApiSecurity does: a 401 and a 403 leave in the same problem format as every other error
             return http.csrf(AbstractHttpConfigurer::disable)
                     .authorizeHttpRequests(a -> {
                         UsageAdminRoutes.apply(a);
                         a.anyRequest().denyAll();
                     })
-                    .oauth2ResourceServer(o -> o.jwt(Customizer.withDefaults()))
+                    .oauth2ResourceServer(o -> o.jwt(Customizer.withDefaults()).authenticationEntryPoint(problems).accessDeniedHandler(problems))
+                    .exceptionHandling(e -> e.authenticationEntryPoint(problems).accessDeniedHandler(problems))
                     .build();
         }
 
@@ -306,5 +309,23 @@ class UsageAdminApiTest {
     void aHugePageIsRefusedNotAnInternalError() throws Exception {
         body(get("/v1/usage/tenants?page=2147483647&size=200"), 400);
         body(get("/v1/usage/audit?page=1000&size=200"), 400); // 200,000 rows deep
+    }
+
+    // ---- the house error format -------------------------------------------------------------------
+
+    @Test @Order(14)
+    void errorsLeaveAsProblemJsonWithTheHouseExtensions() throws Exception {
+        mvc.perform(get("/v1/usage/tenants/ghost").with(ADMIN)).andExpect(status().isNotFound())
+                .andExpect(content().contentTypeCompatibleWith("application/problem+json"))
+                .andExpect(jsonPath("$.status").value(404)).andExpect(jsonPath("$.code").value("TENANT_NOT_FOUND"))
+                .andExpect(jsonPath("$.instance").value("/v1/usage/tenants/ghost")).andExpect(jsonPath("$.timestamp").exists())
+                .andExpect(jsonPath("$.detail").value("tenant ghost does not exist"));
+        mvc.perform(json(post("/v1/usage/metrics"), "{\"code\":\"API_REQUESTS\",\"unit\":\"request\"}").with(ADMIN))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("METRIC_EXISTS"));
+        mvc.perform(json(post("/v1/usage/tenants"), "{not json").with(ADMIN))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("MALFORMED_REQUEST_BODY"));
+        mvc.perform(get("/v1/usage/tenants").with(as("usage:write")))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+        mvc.perform(get("/v1/usage/tenants")).andExpect(status().isUnauthorized()).andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));
     }
 }

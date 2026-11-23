@@ -2,7 +2,7 @@ package com.example.usage.admin.tenant;
 
 import com.example.usage.admin.audit.Audit;
 import com.example.usage.admin.support.AdminContext;
-import com.example.usage.admin.support.AdminException;
+import com.example.problem.ApiException;
 import com.example.usage.admin.support.Check;
 
 import java.sql.ResultSet;
@@ -48,7 +48,7 @@ public final class OverrideAdmin {
     }
 
     public View create(String tenantId, Create in) {
-        if (in == null || in.limitId() == null) throw AdminException.invalid("FIELD_REQUIRED", "limitId is required");
+        if (in == null || in.limitId() == null) throw ApiException.badRequest("FIELD_REQUIRED", "limitId is required");
         long value = value(in.value());
         String reason = Check.text(in.reason(), "reason", 300);
         return ctx.changingTenant(tenantId, () -> {
@@ -57,13 +57,13 @@ public final class OverrideAdmin {
                             SELECT tp.id FROM {tenant_plan} tp JOIN {plan_limit} pl ON pl.plan_id = tp.plan_id
                              WHERE tp.tenant_id = :tenant AND tp.valid_to IS NULL AND pl.id = :limit
                             """)).param("tenant", tenantId).param("limit", in.limitId()).query(UUID.class).optional()
-                    .orElseThrow(() -> AdminException.notFound("LIMIT_NOT_IN_PLAN", "limit " + in.limitId() + " is not a limit of the plan tenant " + tenantId + " is on"));
+                    .orElseThrow(() -> ApiException.notFound("LIMIT_NOT_IN_PLAN", "limit " + in.limitId() + " is not a limit of the plan tenant " + tenantId + " is on"));
             UUID id = UUID.randomUUID();
             try {
                 ctx.jdbc().sql(ctx.sql("INSERT INTO {tenant_limit_override} (id, tenant_plan_id, plan_limit_id, limit_value, reason) VALUES (:id, :tp, :limit, :value, :reason)"))
                         .param("id", id).param("tp", tenantPlan).param("limit", in.limitId()).param("value", value).param("reason", reason).update();
             } catch (org.springframework.dao.DuplicateKeyException e) {
-                throw AdminException.conflict("OVERRIDE_EXISTS", "this limit already has an override: update it");
+                throw ApiException.conflict("OVERRIDE_EXISTS", "this limit already has an override: update it");
             }
             View created = get(tenantId, id);
             audit.record("CREATE", "override", id, tenantId, null, created, reason);
@@ -72,7 +72,7 @@ public final class OverrideAdmin {
     }
 
     public View update(String tenantId, UUID id, Update in) {
-        if (in == null || (in.value() == null && in.reason() == null)) throw AdminException.invalid("NOTHING_TO_UPDATE", "give value or reason");
+        if (in == null || (in.value() == null && in.reason() == null)) throw ApiException.badRequest("NOTHING_TO_UPDATE", "give value or reason");
         return ctx.changingTenant(tenantId, () -> {
             View before = get(tenantId, id);
             String reason = in.reason() == null ? before.reason() : Check.text(in.reason(), "reason", 300);
@@ -96,11 +96,11 @@ public final class OverrideAdmin {
     private View get(String tenantId, UUID id) {
         return ctx.jdbc().sql(ctx.sql(SELECT + " WHERE o.id = :id AND tp.tenant_id = :tenant AND tp.valid_to IS NULL")).param("id", id).param("tenant", tenantId)
                 .query(OverrideAdmin::view).optional()
-                .orElseThrow(() -> AdminException.notFound("OVERRIDE_NOT_FOUND", "override " + id + " not found for tenant " + tenantId));
+                .orElseThrow(() -> ApiException.notFound("OVERRIDE_NOT_FOUND", "override " + id + " not found for tenant " + tenantId));
     }
 
     private static long value(Long v) {
-        if (v == null || v < 0) throw AdminException.invalid("INVALID_VALUE", "value must be >= 0");
+        if (v == null || v < 0) throw ApiException.badRequest("INVALID_VALUE", "value must be >= 0");
         return v;
     }
 

@@ -2,7 +2,7 @@ package com.example.usage.admin.catalog;
 
 import com.example.usage.admin.audit.Audit;
 import com.example.usage.admin.support.AdminContext;
-import com.example.usage.admin.support.AdminException;
+import com.example.problem.ApiException;
 import com.example.usage.admin.support.Check;
 import com.example.usage.admin.support.Page;
 import com.example.usage.admin.support.Where;
@@ -60,7 +60,7 @@ public final class PlanAdmin {
     }
 
     public PlanView create(CreatePlan in) {
-        if (in == null) throw AdminException.invalid("FIELD_REQUIRED", "body is required");
+        if (in == null) throw ApiException.badRequest("FIELD_REQUIRED", "body is required");
         String code = Check.text(in.code(), "code", 60);
         String name = Check.text(in.name(), "name", 200);
         return ctx.inTx(() -> {
@@ -72,7 +72,7 @@ public final class PlanAdmin {
     }
 
     public PlanView update(UUID id, UpdatePlan in) {
-        if (in == null || (in.name() == null && in.status() == null)) throw AdminException.invalid("NOTHING_TO_UPDATE", "give name or status");
+        if (in == null || (in.name() == null && in.status() == null)) throw ApiException.badRequest("NOTHING_TO_UPDATE", "give name or status");
         return ctx.inTx(() -> {
             PlanView before = plan(id);
             ctx.jdbc().sql(ctx.sql("UPDATE {plan} SET name = :name, status = :status WHERE id = :id"))
@@ -125,13 +125,17 @@ public final class PlanAdmin {
             requireEditable(planId);
             Resolved r = resolve(in);
             UUID id = UUID.randomUUID();
-            ctx.jdbc().sql(ctx.sql("""
-                            INSERT INTO {plan_limit} (id, plan_id, metric_id, limit_type, limit_value, window_seconds, window_months, enforcement)
-                            VALUES (:id, :plan, :metric, :type, :value, :seconds, :months, :enforcement)
-                            """))
-                    .param("id", id).param("plan", planId).param("metric", r.metricId()).param("type", r.limit().type().name())
-                    .param("value", r.limit().value()).param("seconds", r.seconds(), java.sql.Types.BIGINT)
-                    .param("months", r.months(), java.sql.Types.INTEGER).param("enforcement", r.limit().enforcement().name()).update();
+            try {
+                ctx.jdbc().sql(ctx.sql("""
+                                INSERT INTO {plan_limit} (id, plan_id, metric_id, limit_type, limit_value, window_seconds, window_months, enforcement)
+                                VALUES (:id, :plan, :metric, :type, :value, :seconds, :months, :enforcement)
+                                """))
+                        .param("id", id).param("plan", planId).param("metric", r.metricId()).param("type", r.limit().type().name())
+                        .param("value", r.limit().value()).param("seconds", r.seconds(), java.sql.Types.BIGINT)
+                        .param("months", r.months(), java.sql.Types.INTEGER).param("enforcement", r.limit().enforcement().name()).update();
+            } catch (org.springframework.dao.DuplicateKeyException e) {
+                throw ApiException.conflict("LIMIT_EXISTS", "the plan already has a limit of this type and window on " + in.metric());
+            }
             LimitView created = limit(id);
             audit.record("CREATE", "plan_limit", id, null, null, created, null);
             return created;
@@ -173,17 +177,17 @@ public final class PlanAdmin {
 
     /** Builds the core {@link Limit} from the request, so the platform's own rules (RATE only on access metrics, only QUOTA may overage...) are the ones enforced. */
     private Resolved resolve(LimitRequest in) {
-        if (in == null) throw AdminException.invalid("FIELD_REQUIRED", "body is required");
+        if (in == null) throw ApiException.badRequest("FIELD_REQUIRED", "body is required");
         String metricCode = Check.text(in.metric(), "metric", 60);
         Type type = enumOf(Type.class, in.type(), "type");
         Enforcement enforcement = in.enforcement() == null ? Enforcement.REJECT : enumOf(Enforcement.class, in.enforcement(), "enforcement");
-        if (in.value() == null) throw AdminException.invalid("FIELD_REQUIRED", "value is required");
+        if (in.value() == null) throw ApiException.badRequest("FIELD_REQUIRED", "value is required");
         if (in.windowSeconds() != null && in.windowMonths() != null) {
-            throw AdminException.invalid("INVALID_WINDOW", "give windowSeconds or windowMonths, not both");
+            throw ApiException.badRequest("INVALID_WINDOW", "give windowSeconds or windowMonths, not both");
         }
         var row = ctx.jdbc().sql(ctx.sql("SELECT id, count_trigger FROM {metric} WHERE code = :code")).param("code", metricCode)
                 .query((rs, i) -> new Object[] {rs.getObject("id", UUID.class), rs.getString("count_trigger")}).optional()
-                .orElseThrow(() -> AdminException.notFound("METRIC_NOT_FOUND", "metric " + metricCode + " does not exist"));
+                .orElseThrow(() -> ApiException.notFound("METRIC_NOT_FOUND", "metric " + metricCode + " does not exist"));
         Metric metric = new Metric(metricCode, "ON_FINAL_STATUS".equals(row[1]) ? Mode.REPORT_ONLY : Mode.CONSUME_ON_CHECK);
         Limit limit;
         try {
@@ -191,7 +195,7 @@ public final class PlanAdmin {
                     : in.windowMonths() != null ? Window.months(in.windowMonths()) : null;
             limit = new Limit(metric, type, in.value(), window, enforcement); // refuses what the platform would refuse
         } catch (IllegalArgumentException e) {
-            throw AdminException.invalid("INVALID_LIMIT", e.getMessage());
+            throw ApiException.badRequest("INVALID_LIMIT", e.getMessage());
         }
         return new Resolved((UUID) row[0], limit, in.windowSeconds(), in.windowMonths());
     }
@@ -200,31 +204,35 @@ public final class PlanAdmin {
         try {
             return Enum.valueOf(type, value == null ? "" : value);
         } catch (IllegalArgumentException e) {
-            throw AdminException.invalid("INVALID_" + field.toUpperCase(), field + " must be one of " + List.of(type.getEnumConstants()));
+            throw ApiException.badRequest("INVALID_" + field.toUpperCase(), field + " must be one of " + List.of(type.getEnumConstants()));
         }
     }
 
     private void requireEditable(UUID planId) {
         // locks the plan row: a subscription taking this plan at the same time waits (it takes a shared lock), so it cannot slip in after the check
         ctx.jdbc().sql(ctx.sql("SELECT id FROM {plan} WHERE id = :id FOR UPDATE")).param("id", planId).query(UUID.class).optional()
-                .orElseThrow(() -> AdminException.notFound("PLAN_NOT_FOUND", "plan " + planId + " does not exist"));
+                .orElseThrow(() -> ApiException.notFound("PLAN_NOT_FOUND", "plan " + planId + " does not exist"));
         boolean used = ctx.jdbc().sql(ctx.sql("SELECT EXISTS (SELECT 1 FROM {tenant_plan} WHERE plan_id = :id)")).param("id", planId)
                 .query(Boolean.class).single();
-        if (used) throw AdminException.conflict("PLAN_IN_USE", "a tenant is or was on this plan: clone it to the next version to change its limits");
+        if (used) throw ApiException.conflict("PLAN_IN_USE", "a tenant is or was on this plan: clone it to the next version to change its limits");
     }
 
     private UUID insertPlan(String code, String name) {
         UUID id = UUID.randomUUID();
-        ctx.jdbc().sql(ctx.sql("""
-                        INSERT INTO {plan} (id, code, name, version)
-                        SELECT :id, :code, :name, COALESCE(MAX(version), 0) + 1 FROM {plan} WHERE code = :code
-                        """)).param("id", id).param("code", code).param("name", name).update();
+        try {
+            ctx.jdbc().sql(ctx.sql("""
+                            INSERT INTO {plan} (id, code, name, version)
+                            SELECT :id, :code, :name, COALESCE(MAX(version), 0) + 1 FROM {plan} WHERE code = :code
+                            """)).param("id", id).param("code", code).param("name", name).update();
+        } catch (org.springframework.dao.DuplicateKeyException e) { // two versions of the same code created at the same moment
+            throw ApiException.conflict("PLAN_VERSION_CONFLICT", "another version of " + code + " was created at the same time: try again");
+        }
         return id;
     }
 
     private PlanView plan(UUID id) {
         return ctx.jdbc().sql(ctx.sql(PLAN + " WHERE id = :id")).param("id", id).query(PlanAdmin::planView).optional()
-                .orElseThrow(() -> AdminException.notFound("PLAN_NOT_FOUND", "plan " + id + " does not exist"));
+                .orElseThrow(() -> ApiException.notFound("PLAN_NOT_FOUND", "plan " + id + " does not exist"));
     }
 
     private LimitView limit(UUID id) {
@@ -234,7 +242,7 @@ public final class PlanAdmin {
     private LimitView limitOf(UUID planId, UUID limitId) {
         return ctx.jdbc().sql(ctx.sql(LIMIT + " WHERE pl.id = :id AND pl.plan_id = :plan")).param("id", limitId).param("plan", planId)
                 .query(PlanAdmin::limitView).optional()
-                .orElseThrow(() -> AdminException.notFound("LIMIT_NOT_FOUND", "limit " + limitId + " is not in plan " + planId));
+                .orElseThrow(() -> ApiException.notFound("LIMIT_NOT_FOUND", "limit " + limitId + " is not in plan " + planId));
     }
 
     private static PlanView planView(ResultSet rs, int row) throws SQLException {

@@ -2,7 +2,7 @@ package com.example.usage.admin.usage;
 
 import com.example.usage.admin.audit.Audit;
 import com.example.usage.admin.support.AdminContext;
-import com.example.usage.admin.support.AdminException;
+import com.example.problem.ApiException;
 import com.example.usage.admin.support.Check;
 
 import com.example.usage.core.UsageEngine;
@@ -42,24 +42,24 @@ public final class CompensationAdmin {
     }
 
     public Result compensate(Request in) {
-        if (in == null || in.originalEventId() == null) throw AdminException.invalid("FIELD_REQUIRED", "originalEventId is required");
+        if (in == null || in.originalEventId() == null) throw ApiException.badRequest("FIELD_REQUIRED", "originalEventId is required");
         String reason = Check.text(in.reason(), "reason", 60); // the ledger column is VARCHAR(60)
         UsageQueries.Event original = queries.event(in.originalEventId());
-        if (!"USAGE".equals(original.eventType())) throw AdminException.invalid("NOT_A_USAGE_EVENT", "only a usage event can be compensated");
+        if (!"USAGE".equals(original.eventType())) throw ApiException.badRequest("NOT_A_USAGE_EVENT", "only a usage event can be compensated");
         long quantity = in.quantity() == null ? original.quantity() : in.quantity();
-        if (quantity > original.quantity()) throw AdminException.invalid("QUANTITY_TOO_LARGE", "quantity is larger than the original " + original.quantity());
+        if (quantity > original.quantity()) throw ApiException.badRequest("QUANTITY_TOO_LARGE", "quantity is larger than the original " + original.quantity());
         Instant now = ctx.clock().instant();
         Compensation c;
         try {
             c = Compensation.of(original.eventId(), new TenantId(original.tenantId()), original.metricCode(), quantity, now, reason);
         } catch (IllegalArgumentException e) {
-            throw AdminException.invalid("INVALID_COMPENSATION", e.getMessage());
+            throw ApiException.badRequest("INVALID_COMPENSATION", e.getMessage());
         }
 
         Compensate outcome = engine.compensate(c).toCompletableFuture().join();
         switch (outcome) {
-            case ALREADY_COMPENSATED -> throw AdminException.conflict("ALREADY_COMPENSATED", "event " + original.eventId() + " was already compensated");
-            case INVALID, ORIGINAL_NOT_FOUND -> throw AdminException.invalid("INVALID_COMPENSATION", "the platform refused this compensation: " + outcome);
+            case ALREADY_COMPENSATED -> throw ApiException.conflict("ALREADY_COMPENSATED", "event " + original.eventId() + " was already compensated");
+            case INVALID, ORIGINAL_NOT_FOUND -> throw ApiException.badRequest("INVALID_COMPENSATION", "the platform refused this compensation: " + outcome);
             case APPLIED, COUNTER_DRIFT, DUPLICATE -> { }
         }
         // a repeat answers with what is stored, not with what this request asked for

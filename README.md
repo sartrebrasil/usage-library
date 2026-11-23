@@ -561,12 +561,135 @@ hora**, pelo `UsageEngine`, sem broker nem outbox: a resposta diz o resultado (`
 mover o contador, o reconciliador repara métricas de resultado, mas o de uma métrica de acesso só desce ao fim do período).
 Aqui a auditoria é gravada logo **depois** do ledger, não na mesma transação (o ledger é do motor); por isso a repetição a completa.
 
+### Como usar, passo a passo
+
+**1. Dependência.** O módulo se auto-configura; não há anotação nem `@Import`:
+
+```xml
+<dependency><groupId>com.example.usage</groupId><artifactId>usage-admin</artifactId></dependency>
+<dependency><groupId>com.example.usage</groupId><artifactId>usage-spring-boot-starter</artifactId></dependency> <!-- UsageEngine, cache de política, migrations -->
+<dependency><groupId>com.example.usage</groupId><artifactId>usage-postgres</artifactId></dependency>
+<dependency><groupId>com.example.usage</groupId><artifactId>usage-redis</artifactId></dependency>           <!-- contadores: necessário para a compensação devolver a cota -->
+```
+
+O mínimo para só gerir e consultar é o `usage-admin` com um `DataSource`. O `UsageEngine` (starter + Redis) só é preciso para a
+compensação manual; sem ele a rota `POST /compensations` simplesmente não existe.
+
+**2. Banco.** O módulo **não roda migrations**. As tabelas (`V1` a `V3`) precisam existir no schema `usage.postgres.schema`
+(padrão `usage`): com o starter, `usage.postgres.migrate=true`; em um pipeline próprio, `UsageSchema.migrate(dataSource, "usage")`
+ou os arquivos de `usage-postgres/src/main/resources/db/usage/`.
+
+**3. Segurança** (obrigatória: sem isto a aplicação não sobe). Libere as rotas na sua cadeia, antes da regra que nega o resto,
+e ligue o `ProblemSecurityHandler` para o 401 e o 403 saírem no formato padrão:
+
+```java
+@Bean
+SecurityFilterChain security(HttpSecurity http, ProblemSecurityHandler problems) throws Exception {
+    return http
+            .authorizeHttpRequests(a -> {
+                UsageAdminRoutes.apply(a, "/v1/usage");   // usage:read, usage:write, usage:compensate
+                a.anyRequest().denyAll();
+            })
+            .oauth2ResourceServer(o -> o.jwt(Customizer.withDefaults())
+                    .authenticationEntryPoint(problems).accessDeniedHandler(problems))
+            .build();
+}
+```
+
+No Keycloak, crie as três roles de realm (`usage:read`, `usage:write`, `usage:compensate`) e dê ao client do operador as que ele
+precisa. O módulo lê as **authorities** que a sua cadeia já extrai do token (no engine, o claim `roles`): nada a configurar nele.
+
+**4. Do zero até o primeiro consumo.** Exemplo com `curl` (`$T` é um token com as três roles). A ordem importa: o catálogo
+vem antes da contratação.
+
+```bash
+H=(-H "Authorization: Bearer $T" -H "Content-Type: application/json")
+U=http://localhost:8080/v1/usage
+
+# 1) o que se mede (ON_REQUEST: o check consome; ON_FINAL_STATUS: o processamento consome)
+curl -X POST $U/metrics "${H[@]}" -d '{"code":"API_REQUESTS","unit":"request","countTrigger":"ON_REQUEST"}'
+
+# 2) um plano (criar um code que já existe gera a próxima versão) e os seus limites
+PLAN=$(curl -s -X POST $U/plans "${H[@]}" -d '{"code":"PRO","name":"Pro"}' | jq -r .id)
+curl -X POST $U/plans/$PLAN/limits "${H[@]}" -d '{"metric":"API_REQUESTS","type":"QUOTA","value":1000,"windowSeconds":86400}'
+curl -X POST $U/plans/$PLAN/limits "${H[@]}" -d '{"metric":"API_REQUESTS","type":"RATE","value":50,"windowSeconds":60}'
+curl -X POST $U/plans/$PLAN/limits "${H[@]}" -d '{"metric":"API_REQUESTS","type":"QUOTA","value":20000,"windowMonths":1,"enforcement":"ALLOW_OVERAGE"}'
+
+# 3) o tenant e a assinatura (startsAt é a âncora do ciclo de cobrança; omita para "agora")
+curl -X POST $U/tenants "${H[@]}" -d '{"id":"acme","name":"Acme"}'
+curl -X POST $U/tenants/acme/subscriptions "${H[@]}" -d '{"planCode":"PRO","planVersion":1}'
+```
+
+A partir daqui o gateway já decide pelo plano (em até `usage.policy-cache-ttl` nas outras instâncias; na hora no processo que
+fez a escrita).
+
+**5. Operações do dia a dia.**
+
+```bash
+# quanto o tenant consumiu (net = total + lateTotal - credits: o que o billing cobra)
+curl "$U/summaries?tenantId=acme&metric=API_REQUESTS" "${H[@]}"
+
+# trocar de plano (o plano ENTERPRISE v1 precisa existir, criado como o PRO acima): troca os limites e mantém o ciclo e os contadores do período
+curl -X PUT $U/tenants/acme/plan "${H[@]}" -d '{"planCode":"ENTERPRISE","planVersion":1}'
+
+# exceção de limite só para este tenant (a limitId vem de GET /plans/{id}/limits; reason é obrigatório)
+curl -X POST $U/tenants/acme/overrides "${H[@]}" -d '{"limitId":"<uuid>","value":5000,"reason":"contrato 42"}'
+
+# mudar um plano que já tem assinantes: clone (próxima versão, limites copiados), edite a cópia e passe os tenants para ela
+curl -X POST $U/plans/$PLAN/clone "${H[@]}"
+curl -X PATCH $U/plans/$PLAN "${H[@]}" -d '{"status":"DEPRECATED"}'     # não aceita novas assinaturas
+
+# suspender e reativar (tenant nunca se apaga)
+curl -X PATCH $U/tenants/acme "${H[@]}" -d '{"status":"SUSPENDED"}'
+
+# achar um evento e estorná-lo (aplicado na hora; repetir o pedido é inofensivo)
+curl "$U/events?tenantId=acme&from=2026-11-01T00:00:00Z" "${H[@]}"
+curl -X POST $U/compensations "${H[@]}" -d '{"originalEventId":"<uuid>","reason":"cobranca indevida"}'
+
+# quem mudou o quê
+curl "$U/audit?tenantId=acme&from=2026-11-01T00:00:00Z" "${H[@]}"
+```
+
+**6. Erros que você vai encontrar.**
+
+| Resposta | `code` | O que fazer |
+|---|---|---|
+| 409 | `PLAN_IN_USE` | O plano já teve assinante: clone para a próxima versão e edite a cópia |
+| 409 | `METRIC_HAS_USAGE` | A métrica já tem uso: o `countTrigger` não muda mais |
+| 409 | `ALREADY_SUBSCRIBED` | O tenant já tem assinatura aberta: troque o plano (`PUT .../plan`) ou encerre (`DELETE .../subscriptions/open`) |
+| 409 | `PLAN_DEPRECATED` | Assine a versão mais nova do plano |
+| 400 | `FUTURE_NOT_SUPPORTED` | Troca de plano e encerramento valem agora ou no passado, nunca no futuro |
+| 400 | `FILTER_REQUIRED` | `/events` sem `tenantId` nem `from`: o ledger é grande demais para listar sem filtro |
+| 400 | `INVALID_LIMIT` | O core recusou o limite (ex.: `RATE` em métrica de resultado, ou `ALLOW_OVERAGE` fora de `QUOTA`) |
+| 400 | `INVALID_PAGE` | `size` de 1 a 200 e `page * size` até 100.000: restrinja os filtros |
+| 401 / 403 | `UNAUTHENTICATED` / `ACCESS_DENIED` | Token ausente ou sem a role da rota (veja a tabela de roles) |
+| 404 | `*_NOT_FOUND` | Id, tenant, plano ou métrica inexistente |
+
+**7. Com o módulo em outro caminho.** `usage.admin.base-path=/admin/usage` muda o prefixo; passe o mesmo valor a
+`UsageAdminRoutes.apply`. `usage.admin.enabled=false` desliga a API sem tirar o jar.
+
 Pacotes do módulo (`com.example.usage.admin`): `web` (controllers e erros), `tenant` (tenants, assinaturas, overrides),
 `catalog` (métricas, planos, limites), `usage` (pesquisa de uso e compensação), `audit`, `security` (`UsageAdminRoutes`,
 `UsageAdminRoles`) e `support` (paginação, filtros, validação, contexto). A auto-configuração fica na raiz.
 
-Erros são `application/problem+json` com um `code` estável (`TENANT_NOT_FOUND`, `PLAN_IN_USE`, `ALREADY_SUBSCRIBED`,
-`FILTER_REQUIRED`...). Toda escrita grava em `usage_audit` **na mesma transação** da mudança; a tabela é só de
+Erros usam o formato padrão da casa, do `problem-spring-boot-starter` (RFC 9457, `application/problem+json`), que o módulo
+traz como dependência: o advice global do starter responde, e os serviços só lançam `ApiException` com um `code` estável.
+
+```json
+{ "type": "...", "title": "Not Found", "status": 404, "detail": "tenant acme does not exist",
+  "instance": "/v1/usage/tenants/acme", "code": "TENANT_NOT_FOUND", "timestamp": "2026-11-23T12:00:00Z", "traceId": "b7c1e5a3d8f04e2a" }
+```
+
+Códigos do módulo (`code`), por assunto: `TENANT_NOT_FOUND`, `TENANT_EXISTS`, `METRIC_NOT_FOUND`, `METRIC_EXISTS`, `METRIC_HAS_USAGE`,
+`PLAN_NOT_FOUND`, `PLAN_IN_USE`, `PLAN_DEPRECATED`, `LIMIT_EXISTS`, `INVALID_LIMIT`, `ALREADY_SUBSCRIBED`, `NO_OPEN_SUBSCRIPTION`,
+`NO_PLAN_IN_FORCE`, `PLAN_ALREADY_OPEN`, `FUTURE_NOT_SUPPORTED`, `INVALID_END`, `OVERRIDE_EXISTS`, `LIMIT_NOT_IN_PLAN`,
+`FILTER_REQUIRED`, `INVALID_PAGE`, `ALREADY_COMPENSATED`, `INVALID_COMPENSATION`, `EVENT_NOT_FOUND`. JSON malformado, parâmetro
+inválido, 401 e 403 saem com os códigos do próprio starter (`MALFORMED_REQUEST_BODY`, `UNAUTHENTICATED`, `ACCESS_DENIED`...).
+
+Duas coisas do host: (1) o starter precisa estar instalado (`mvn install` da lib; versão em `problem-library.version` no `pom`
+raiz) e **não** pode estar desligado (`problem.enabled=false` faria as `ApiException` do módulo saírem como 500); (2) para o 401 e o
+403 saírem nesse formato, a cadeia de segurança do host liga o `ProblemSecurityHandler` (`authenticationEntryPoint` e
+`accessDeniedHandler`), o que o `ApiSecurity` do engine já faz.. Toda escrita grava em `usage_audit` **na mesma transação** da mudança; a tabela é só de
 inclusão (um gatilho recusa `UPDATE` e `DELETE`).
 
 **Cache de política.** Depois de qualquer escrita que afeta um tenant, o módulo invalida o `CachedPolicyStore` do próprio
@@ -727,7 +850,7 @@ schema, eles usam o `search_path` como antes, **mas então o Flyway migra o sche
 
 ```bash
 cd usage-platform
-mvn test            # 263 testes; Redis e PostgreSQL reais em contêineres
+mvn test            # 264 testes; Redis e PostgreSQL reais em contêineres
 mvn install         # instala os módulos no repositório local
 ```
 

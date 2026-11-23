@@ -1,7 +1,7 @@
 package com.example.usage.admin.usage;
 
 import com.example.usage.admin.support.AdminContext;
-import com.example.usage.admin.support.AdminException;
+import com.example.problem.ApiException;
 import com.example.usage.admin.support.Page;
 import com.example.usage.admin.support.Where;
 
@@ -45,7 +45,7 @@ public final class UsageQueries {
     /** The ledger is large: a search needs a tenant or a start time, never the whole table. */
     public Page<Event> events(String tenantId, String metric, String type, Instant from, Instant to, Page.Request page) {
         boolean noTenant = tenantId == null || tenantId.isBlank();
-        if (noTenant && from == null) throw AdminException.invalid("FILTER_REQUIRED", "give tenantId or from: the ledger is too large to list unfiltered");
+        if (noTenant && from == null) throw ApiException.badRequest("FILTER_REQUIRED", "give tenantId or from: the ledger is too large to list unfiltered");
         Where w = new Where().eq("e.tenant_id", tenantId).eq("e.metric_code", metric).eq("e.event_type", type)
                 .since("e.occurred_at", from).before("e.occurred_at", to);
         return Page.of(ctx.jdbc().sql(ctx.sql(EVENT) + w.sql() + " ORDER BY e.occurred_at DESC, e.event_id LIMIT :limit OFFSET :offset")
@@ -55,7 +55,7 @@ public final class UsageQueries {
 
     public Event event(UUID id) {
         return ctx.jdbc().sql(ctx.sql(EVENT + " WHERE e.event_id = :id")).param("id", id).query(UsageQueries::event).optional()
-                .orElseThrow(() -> AdminException.notFound("EVENT_NOT_FOUND", "event " + id + " does not exist"));
+                .orElseThrow(() -> ApiException.notFound("EVENT_NOT_FOUND", "event " + id + " does not exist"));
     }
 
     private static Summary summary(ResultSet rs, int row) throws SQLException {

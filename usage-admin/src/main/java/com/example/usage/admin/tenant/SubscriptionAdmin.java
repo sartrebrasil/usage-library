@@ -2,7 +2,7 @@ package com.example.usage.admin.tenant;
 
 import com.example.usage.admin.audit.Audit;
 import com.example.usage.admin.support.AdminContext;
-import com.example.usage.admin.support.AdminException;
+import com.example.problem.ApiException;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -40,7 +40,7 @@ public final class SubscriptionAdmin {
     }
 
     public Subscription subscribe(String tenantId, Subscribe in) {
-        if (in == null) throw AdminException.invalid("FIELD_REQUIRED", "body is required");
+        if (in == null) throw ApiException.badRequest("FIELD_REQUIRED", "body is required");
         Instant at = in.startsAt() == null ? ctx.clock().instant() : in.startsAt();
         return ctx.changingTenant(tenantId, () -> {
             tenants.get(tenantId);
@@ -50,7 +50,7 @@ public final class SubscriptionAdmin {
                 ctx.jdbc().sql(ctx.sql("INSERT INTO {tenant_subscription} (id, tenant_id, cycle_anchor, started_at) VALUES (:id, :tenant, :at, :at)"))
                         .param("id", id).param("tenant", tenantId).param("at", AdminContext.ts(at)).update();
             } catch (org.springframework.dao.DuplicateKeyException e) {
-                throw AdminException.conflict("ALREADY_SUBSCRIBED", "tenant " + tenantId + " already has an open subscription");
+                throw ApiException.conflict("ALREADY_SUBSCRIBED", "tenant " + tenantId + " already has an open subscription");
             }
             openPlan(tenantId, plan, at);
             Subscription created = subscription(id);
@@ -60,7 +60,7 @@ public final class SubscriptionAdmin {
     }
 
     public PlanAssignment changePlan(String tenantId, ChangePlan in) {
-        if (in == null) throw AdminException.invalid("FIELD_REQUIRED", "body is required");
+        if (in == null) throw ApiException.badRequest("FIELD_REQUIRED", "body is required");
         Instant at = notInTheFuture(in.at());
         return ctx.changingTenant(tenantId, () -> {
             tenants.get(tenantId);
@@ -68,7 +68,7 @@ public final class SubscriptionAdmin {
             PlanAssignment before = current(tenantId);
             int closed = ctx.jdbc().sql(ctx.sql("UPDATE {tenant_plan} SET valid_to = :at WHERE tenant_id = :tenant AND valid_to IS NULL AND valid_from < :at"))
                     .param("at", AdminContext.ts(at)).param("tenant", tenantId).update();
-            if (closed == 0) throw AdminException.conflict("NO_PLAN_IN_FORCE", "tenant " + tenantId + " has no plan that started before " + at);
+            if (closed == 0) throw ApiException.conflict("NO_PLAN_IN_FORCE", "tenant " + tenantId + " has no plan that started before " + at);
             openPlan(tenantId, plan, at);
             PlanAssignment after = current(tenantId);
             audit.record("CHANGE_PLAN", "tenant_plan", after.id(), tenantId, before, after, null);
@@ -81,10 +81,10 @@ public final class SubscriptionAdmin {
         return ctx.changingTenant(tenantId, () -> {
             tenants.get(tenantId);
             Subscription before = open(tenantId);
-            if (!at.isAfter(before.startedAt())) throw AdminException.invalid("INVALID_END", "the end must be after the start " + before.startedAt());
+            if (!at.isAfter(before.startedAt())) throw ApiException.badRequest("INVALID_END", "the end must be after the start " + before.startedAt());
             // the plan in force must end too, so it must have started before the end: otherwise it would stay open for good and block the next subscription
             Instant planFrom = current(tenantId).validFrom();
-            if (!at.isAfter(planFrom)) throw AdminException.invalid("INVALID_END", "the end must be after the current plan started (" + planFrom + ")");
+            if (!at.isAfter(planFrom)) throw ApiException.badRequest("INVALID_END", "the end must be after the current plan started (" + planFrom + ")");
             ctx.jdbc().sql(ctx.sql("UPDATE {tenant_subscription} SET ended_at = :at WHERE id = :id")).param("at", AdminContext.ts(at)).param("id", before.id()).update();
             ctx.jdbc().sql(ctx.sql("UPDATE {tenant_plan} SET valid_to = :at WHERE tenant_id = :tenant AND valid_to IS NULL"))
                     .param("at", AdminContext.ts(at)).param("tenant", tenantId).update();
@@ -113,11 +113,11 @@ public final class SubscriptionAdmin {
     // ---- internals ---------------------------------------------------------------------------
 
     private UUID activePlan(String code, Integer version) {
-        if (code == null || code.isBlank() || version == null) throw AdminException.invalid("FIELD_REQUIRED", "planCode and planVersion are required");
+        if (code == null || code.isBlank() || version == null) throw ApiException.badRequest("FIELD_REQUIRED", "planCode and planVersion are required");
         var row = ctx.jdbc().sql(ctx.sql("SELECT id, status FROM {plan} WHERE code = :code AND version = :version FOR SHARE")).param("code", code).param("version", version)
                 .query((rs, i) -> new Object[] {rs.getObject("id", UUID.class), rs.getString("status")}).optional()
-                .orElseThrow(() -> AdminException.notFound("PLAN_NOT_FOUND", "plan " + code + " v" + version + " does not exist"));
-        if (!"ACTIVE".equals(row[1])) throw AdminException.conflict("PLAN_DEPRECATED", "plan " + code + " v" + version + " is deprecated: pick a newer version");
+                .orElseThrow(() -> ApiException.notFound("PLAN_NOT_FOUND", "plan " + code + " v" + version + " does not exist"));
+        if (!"ACTIVE".equals(row[1])) throw ApiException.conflict("PLAN_DEPRECATED", "plan " + code + " v" + version + " is deprecated: pick a newer version");
         return (UUID) row[0];
     }
 
@@ -126,7 +126,7 @@ public final class SubscriptionAdmin {
             ctx.jdbc().sql(ctx.sql("INSERT INTO {tenant_plan} (id, tenant_id, plan_id, valid_from) VALUES (:id, :tenant, :plan, :from)"))
                     .param("id", UUID.randomUUID()).param("tenant", tenantId).param("plan", plan).param("from", AdminContext.ts(from)).update();
         } catch (org.springframework.dao.DuplicateKeyException e) {
-            throw AdminException.conflict("PLAN_ALREADY_OPEN", "tenant " + tenantId + " still has a plan in force: change it instead of subscribing");
+            throw ApiException.conflict("PLAN_ALREADY_OPEN", "tenant " + tenantId + " still has a plan in force: change it instead of subscribing");
         }
     }
 
@@ -137,14 +137,14 @@ public final class SubscriptionAdmin {
     private Instant notInTheFuture(Instant at) {
         Instant now = ctx.clock().instant();
         if (at == null) return now;
-        if (at.isAfter(now.plusSeconds(5))) throw AdminException.invalid("FUTURE_NOT_SUPPORTED", "the change must take effect now or in the past, not at " + at);
+        if (at.isAfter(now.plusSeconds(5))) throw ApiException.badRequest("FUTURE_NOT_SUPPORTED", "the change must take effect now or in the past, not at " + at);
         return at;
     }
 
     private Subscription open(String tenantId) {
         return ctx.jdbc().sql(ctx.sql(SUBSCRIPTION + " WHERE tenant_id = :tenant AND ended_at IS NULL")).param("tenant", tenantId)
                 .query(SubscriptionAdmin::subscription).optional()
-                .orElseThrow(() -> AdminException.notFound("NO_OPEN_SUBSCRIPTION", "tenant " + tenantId + " has no open subscription"));
+                .orElseThrow(() -> ApiException.notFound("NO_OPEN_SUBSCRIPTION", "tenant " + tenantId + " has no open subscription"));
     }
 
     private PlanAssignment current(String tenantId) {
@@ -153,7 +153,7 @@ public final class SubscriptionAdmin {
                           FROM {tenant_plan} tp JOIN {plan} p ON p.id = tp.plan_id
                          WHERE tp.tenant_id = :tenant AND tp.valid_to IS NULL
                         """)).param("tenant", tenantId).query(SubscriptionAdmin::assignment).optional()
-                .orElseThrow(() -> AdminException.conflict("NO_PLAN_IN_FORCE", "tenant " + tenantId + " has no plan in force"));
+                .orElseThrow(() -> ApiException.conflict("NO_PLAN_IN_FORCE", "tenant " + tenantId + " has no plan in force"));
     }
 
     private Subscription subscription(UUID id) {

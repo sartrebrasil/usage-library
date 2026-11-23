@@ -33,6 +33,7 @@
           outbox-library: outbox-core, outbox-spring-boot-starter, outbox-broker-messaging). -->
     <messaging-library.version>0.1.0-SNAPSHOT</messaging-library.version>
     <outbox-library.version>0.2.0-SNAPSHOT</outbox-library.version>
+    <problem-library.version>1.0-SNAPSHOT</problem-library.version>
   </properties>
 
   <dependencyManagement>
@@ -51,6 +52,7 @@
         <type>pom</type>
         <scope>import</scope>
       </dependency>
+      <dependency><groupId>com.example.problem</groupId><artifactId>problem-spring-boot-starter</artifactId><version>${problem-library.version}</version></dependency>
       <dependency><groupId>org.springframework.cloud</groupId><artifactId>spring-cloud-starter-gateway-server-webflux</artifactId><version>${spring-cloud-gateway.version}</version></dependency>
       <!-- your two libraries publish BOMs: import them, they carry the versions of every artifact used here -->
       <dependency>

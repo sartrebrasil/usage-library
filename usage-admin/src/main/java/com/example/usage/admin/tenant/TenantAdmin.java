@@ -2,7 +2,7 @@ package com.example.usage.admin.tenant;
 
 import com.example.usage.admin.audit.Audit;
 import com.example.usage.admin.support.AdminContext;
-import com.example.usage.admin.support.AdminException;
+import com.example.problem.ApiException;
 import com.example.usage.admin.support.Check;
 import com.example.usage.admin.support.Page;
 import com.example.usage.admin.support.Where;
@@ -36,11 +36,15 @@ public final class TenantAdmin {
 
     public View create(Create in) {
         if (in == null || in.id() == null || !ID.matcher(in.id()).matches()) {
-            throw AdminException.invalid("INVALID_TENANT_ID", "id must match " + ID.pattern());
+            throw ApiException.badRequest("INVALID_TENANT_ID", "id must match " + ID.pattern());
         }
         String name = Check.text(in.name(), "name", 200);
         return ctx.changingTenant(in.id(), () -> {
-            ctx.jdbc().sql(ctx.sql("INSERT INTO {tenant} (id, name) VALUES (:id, :name)")).param("id", in.id()).param("name", name).update();
+            try {
+                ctx.jdbc().sql(ctx.sql("INSERT INTO {tenant} (id, name) VALUES (:id, :name)")).param("id", in.id()).param("name", name).update();
+            } catch (org.springframework.dao.DuplicateKeyException e) {
+                throw ApiException.conflict("TENANT_EXISTS", "tenant " + in.id() + " already exists");
+            }
             View created = get(in.id());
             audit.record("CREATE", "tenant", created.id(), created.id(), null, created, null);
             return created;
@@ -48,7 +52,7 @@ public final class TenantAdmin {
     }
 
     public View update(String id, Update in) {
-        if (in == null || (in.name() == null && in.status() == null)) throw AdminException.invalid("NOTHING_TO_UPDATE", "give name or status");
+        if (in == null || (in.name() == null && in.status() == null)) throw ApiException.badRequest("NOTHING_TO_UPDATE", "give name or status");
         String name = in.name() == null ? null : Check.text(in.name(), "name", 200);
         String status = in.status() == null ? null : Check.oneOf(in.status(), STATUSES, "status");
         return ctx.changingTenant(id, () -> {
@@ -64,7 +68,7 @@ public final class TenantAdmin {
 
     public View get(String id) {
         return ctx.jdbc().sql(ctx.sql(SELECT + " WHERE id = :id")).param("id", id).query(TenantAdmin::view).optional()
-                .orElseThrow(() -> AdminException.notFound("TENANT_NOT_FOUND", "tenant " + id + " does not exist"));
+                .orElseThrow(() -> ApiException.notFound("TENANT_NOT_FOUND", "tenant " + id + " does not exist"));
     }
 
     public Page<View> list(String q, String status, Page.Request page) {
