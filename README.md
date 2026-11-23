@@ -58,8 +58,8 @@ escrever no banco relacional) e **medição** (assíncrona, no banco, fonte de v
 Isso evita contar duas vezes. No modo de resultado não há reserva de vaga: um lote que entra com a cota quase
 cheia passa inteiro e o estouro vira excedente (`ALLOW_OVERAGE`) ou é contido pelo limite de concorrência.
 
-**Limites** (`Limit`): `RATE` (rajada, só métricas de acesso), `QUOTA` (volume por período) e `CONCURRENCY`
-(itens em andamento). O custo de um `check` é uma **quantidade**: um lote de 500 itens é um `check` de custo 500.
+**Limites** (`Limit`): `RATE` (rajada, só métricas de acesso), `QUOTA` (volume por período), `CONCURRENCY`
+(itens em andamento) e `METER` (só mede: tem janela e **nenhum valor**, não decide nada e faz o resumo existir; é o que uma métrica só de cobrança usa, sem uma cota inventada). O custo de um `check` é uma **quantidade**: um lote de 500 itens é um `check` de custo 500.
 A cota admite `REJECT` ou `ALLOW_OVERAGE` (aceita e marca excedente).
 
 **Períodos.** `Window.fixed(duração)` ou `Window.months(n)`, sempre em UTC, alinhados à âncora do ciclo. Mensal
@@ -87,7 +87,7 @@ chegou depois do fechamento) e `credits`. Consumo líquido de um período fechad
 `total + late_total − credits`.
 
 Duas coisas que o billing precisa saber antes de ler a tabela:
-- **O resumo só existe para limites de cota (`QUOTA`)**, não para rate nem concorrência, e tem **uma linha por janela**: um
+- **O resumo só existe para limites `QUOTA` e `METER`** (a métrica **precisa de um dos dois** no plano: sem eles o evento entra no ledger e não há linha de resumo), não para rate nem concorrência, e tem **uma linha por janela**: um
   tenant com cota diária e mensal da mesma métrica gera duas linhas no mesmo período. Escolha a `window_key` que cobra
   (normalmente a mensal) ao somar; somar todas as linhas da métrica conta o consumo em dobro.
 - **O custo de uma requisição do gateway é uma afirmação do cliente** quando vem de um header (`cost-header`): declarar
@@ -260,7 +260,7 @@ var handler = new UsageInboxHandler<Object>(usageEventConsumer, Duration.ofSecon
 O handler lê o corpo cru da mensagem e usa o contrato da plataforma, qualquer que seja o tipo de payload com que ele
 foi registrado na inbox. Ordene ou particione o tópico por tenant.
 
-**Publicação: `OutboxUsageSink`**, um `UsageSink` sobre o `OutboxWriter`. O `aggregateId` é o tenant (ordenação por
+**Publicação: `OutboxUsageSink`**, um `UsageSink` sobre o `OutboxWriter`. O `aggregateId` é o tenant por padrão (ordenação por
 tenant) e o `eventType` é `usage.event` ou `usage.compensation`. O `messageId` da linha do outbox é **aleatório**, e o
 `eventId` da plataforma viaja no header `usage-event-id`: o `eventId` de um item é determinístico, e
 `outbox_message.id` é chave primária, então reaproveitá-lo faria a reentrega de um item já publicado falhar o `INSERT` e
@@ -293,7 +293,7 @@ Duas coisas que o teste mostrou e que o seu código não resolve sozinho:
   ou do banco chega à inbox como essa exceção, e só o que está em `retry.retryable` (ou o padrão equivalente da sua
   versão da inbox) volta para a fila de retry; qualquer outra exceção vai direto para `failed` e o uso se perde. Teste
   isso com o seu `application.yml`, não só com o do exemplo.
-- **Uma linha do outbox que esgota as tentativas congela aquele tenant.** O `aggregateId` é o tenant, então a ordenação
+- **Uma linha do outbox que esgota as tentativas congela aquele tenant** (com `usage.messaging.outbox.ordering=TENANT`, o padrão; com `EVENT` não). O `aggregateId` é o tenant, então a ordenação
   por agregado do outbox para as mensagens seguintes dele atrás da linha morta (dead-lettered) até alguém tratá-la.
   Alerte sobre linhas mortas do outbox: é o único sinal, e o uso daquele tenant só volta a chegar depois da intervenção.
 - **O provedor de consumo vem da messaging-library**, e ela tem adapters para AWS, Azure, GCP, JMS e RabbitMQ: **não
@@ -397,6 +397,7 @@ Ligado ao definir `usage.processor.metric`.
 |---|---|---|---|
 | `usage.messaging.outbox.destination` | texto | — | Liga o `UsageSink` sobre o seu outbox, publicando nesse destino. Sem ele, o `UsageSink` é seu |
 | `usage.messaging.outbox.transaction` | `OWN` \| `CALLER` | pelo papel | `OWN`: uma transação própria por mensagem, numa virtual thread (gateway, que não tem transação de negócio). `CALLER`: na transação aberta de quem chama (processador, dentro do `Persist`). Sem valor: `CALLER` se `usage.processor.metric` está definido, `OWN` caso contrário; quem é gateway **e** processador precisa dizer. `CALLER` com o gateway é recusado no startup; `OWN` chamado dentro de uma transação recusa em runtime. `OWN` exige exatamente um `PlatformTransactionManager` |
+| `usage.messaging.outbox.ordering` | `TENANT` \| `EVENT` | `TENANT` | O que a linha do outbox é de agregado, e portanto a ordem que o relay e o consumidor mantêm. `TENANT`: tudo de um tenant em fila única (o uso e o estorno dele em ordem), e uma linha morta segura as seguintes do tenant. `EVENT`: cada mensagem é o seu agregado, sem ordem entre elas e sem uma linha morta travar as outras; serve a quem publica um evento por item processado (o ledger deduplica). Em `EVENT`, um estorno pode chegar antes do uso: o nível de retry do `original_not_found` precisa existir |
 | `usage.messaging.inbox.enabled` | boolean | `false` | Registra o consumidor como handler da messaging-inbox, no bean `usageEvents`, que serve o receiver `usage-events`. Pede `usage.consumer.enabled=true` |
 | `usage.messaging.inbox.original-not-found-delay` | duração `> 0` | `30s` | Quanto uma compensação que chegou antes do uso espera no nível de retry |
 | `usage.messaging.inbox.timeout` | duração `> 0` | `10s` | Quanto esperar o consumidor antes de tratar a entrega como falha transitória |
@@ -556,7 +557,7 @@ O ator da auditoria é o `Authentication.getName()` do token. Para tirá-lo de o
 | `GET/POST /metrics`, `GET/PATCH /metrics/{id}` | listar (`q`), criar, alterar descrição/unidade | `code` `[A-Z][A-Z0-9_]{1,59}` imutável; `countTrigger` não muda depois que a métrica teve uso no ledger (`METRIC_HAS_USAGE`). Limite: não enxerga eventos ainda em trânsito (outbox/broker) nem contadores no Redis, e a mudança só chega às políticas em cache depois do TTL: faça-a antes de a métrica entrar em uso |
 | `GET/POST /plans`, `GET/PATCH /plans/{id}` | listar (`code`, `status`), criar, alterar nome e status (`DEPRECATED`) | criar com um `code` existente gera a **próxima versão** |
 | `POST /plans/{id}/clone` | próxima versão com os limites copiados | o caminho para mudar um plano que já tem assinante |
-| `GET/POST /plans/{id}/limits`, `PUT/DELETE /plans/{id}/limits/{limitId}` | gerir limites (`metric`, `type`, `value`, `windowSeconds` ou `windowMonths`, `enforcement`) | só em plano **sem uso** (`PLAN_IN_USE`); as regras do core valem (RATE só em métrica de acesso, só QUOTA aceita `ALLOW_OVERAGE`) |
+| `GET/POST /plans/{id}/limits`, `PUT/DELETE /plans/{id}/limits/{limitId}` | gerir limites (`metric`, `type`: `RATE`/`QUOTA`/`CONCURRENCY`/`METER`, `value`, `windowSeconds` ou `windowMonths`, `enforcement`). `METER` não leva `value` (0) nem override | só em plano **sem uso** (`PLAN_IN_USE`); as regras do core valem (RATE só em métrica de acesso, só QUOTA aceita `ALLOW_OVERAGE`) |
 | `GET/POST /tenants/{id}/subscriptions`, `DELETE /tenants/{id}/subscriptions/open` | assinar (`planCode`, `planVersion`, `startsAt`), encerrar | `startsAt` é a âncora do ciclo; o encerramento (`at`) também não pode ser futuro e tem de ser depois do início do plano em vigor; uma assinatura aberta por tenant; plano `DEPRECATED` é recusado |
 | `GET /tenants/{id}/plans`, `PUT /tenants/{id}/plan` | histórico, **trocar de plano** | troca os limites e mantém ciclo e contadores do período. O `at` é agora ou passado: data futura é recusada (`FUTURE_NOT_SUPPORTED`) |
 | `GET/POST /tenants/{id}/overrides`, `PUT/DELETE .../{overrideId}` | exceção de limite de um tenant | `reason` obrigatório; termina junto com o plano |
@@ -858,7 +859,7 @@ schema, eles usam o `search_path` como antes, **mas então o Flyway migra o sche
 
 ```bash
 cd usage-platform
-mvn test            # 264 testes; Redis e PostgreSQL reais em contêineres
+mvn test            # 265 testes; Redis e PostgreSQL reais em contêineres
 mvn install         # instala os módulos no repositório local
 ```
 

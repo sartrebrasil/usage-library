@@ -159,7 +159,8 @@ public final class UsageEngine {
     }
 
     private CompletionStage<Decision> evaluate(Policy p, TenantId t, String metric, long cost, Instant at) {
-        List<Limit> limits = p.limitsFor(metric).stream().sorted(Comparator.comparing(Limit::type)).toList();
+        // METER measures for the summary and decides nothing
+        List<Limit> limits = p.limitsFor(metric).stream().filter(l -> l.type() != Type.METER).sorted(Comparator.comparing(Limit::type)).toList();
         List<Applied> applied = new ArrayList<>();
         return step(limits, 0, p, t, cost, at, applied, false)
                 .thenApply(d -> d.withPlan(p.plan()))
@@ -343,11 +344,12 @@ public final class UsageEngine {
             case RATE -> PeriodCalculator.maxLength(l.window());
             case QUOTA -> quotaTtl(l.window());
             case CONCURRENCY -> lease;
+            case METER -> throw new IllegalStateException("a METER limit has no counter");
         };
     }
 
     private static boolean readOnly(Limit l) {
-        return l.type() == Type.CONCURRENCY || l.metric().mode() == Mode.REPORT_ONLY;
+        return l.type() == Type.CONCURRENCY || l.type() == Type.METER || l.metric().mode() == Mode.REPORT_ONLY;
     }
 
     private static String reason(Limit l) {
@@ -355,6 +357,7 @@ public final class UsageEngine {
             case RATE -> Decision.RATE_LIMITED;
             case QUOTA -> Decision.QUOTA_EXCEEDED;
             case CONCURRENCY -> Decision.CONCURRENCY_EXCEEDED;
+            case METER -> throw new IllegalStateException("a METER limit never refuses");
         };
     }
 

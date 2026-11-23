@@ -181,7 +181,9 @@ public final class PlanAdmin {
         String metricCode = Check.text(in.metric(), "metric", 60);
         Type type = enumOf(Type.class, in.type(), "type");
         Enforcement enforcement = in.enforcement() == null ? Enforcement.REJECT : enumOf(Enforcement.class, in.enforcement(), "enforcement");
-        if (in.value() == null) throw ApiException.badRequest("FIELD_REQUIRED", "value is required");
+        // METER only measures: no value to give (0); every other type needs one
+        if (in.value() == null && type != Type.METER) throw ApiException.badRequest("FIELD_REQUIRED", "value is required");
+        long value = in.value() == null ? 0 : in.value();
         if (in.windowSeconds() != null && in.windowMonths() != null) {
             throw ApiException.badRequest("INVALID_WINDOW", "give windowSeconds or windowMonths, not both");
         }
@@ -193,7 +195,7 @@ public final class PlanAdmin {
         try {
             Window window = in.windowSeconds() != null ? Window.fixed(Duration.ofSeconds(in.windowSeconds()))
                     : in.windowMonths() != null ? Window.months(in.windowMonths()) : null;
-            limit = new Limit(metric, type, in.value(), window, enforcement); // refuses what the platform would refuse
+            limit = new Limit(metric, type, value, window, enforcement); // refuses what the platform would refuse
         } catch (IllegalArgumentException e) {
             throw ApiException.badRequest("INVALID_LIMIT", e.getMessage());
         }

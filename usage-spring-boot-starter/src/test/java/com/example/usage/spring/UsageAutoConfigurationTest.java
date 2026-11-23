@@ -86,6 +86,13 @@ class UsageAutoConfigurationTest {
     }
 
     @Test
+    void theOutboxOrderingIsAPropertyOfItsOwnAndTenantIsTheDefault() {
+        runner.run(ctx -> assertThat(ctx.getBean(UsageProperties.class).messaging().outbox().ordering()).isEqualTo(UsageProperties.OutboxOrdering.TENANT));
+        runner.withPropertyValues("usage.messaging.outbox.ordering=EVENT").run(ctx ->
+                assertThat(ctx.getBean(UsageProperties.class).messaging().outbox().ordering()).isEqualTo(UsageProperties.OutboxOrdering.EVENT));
+    }
+
+    @Test
     void failModeComesFromPropertiesAndReachesTheEngine() {
         CounterStore down = new CounterStore() {
             public java.util.concurrent.CompletionStage<Result> add(String k, long d, long c, Duration t) { return CompletableFuture.failedFuture(new IllegalStateException("down")); }

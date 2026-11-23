@@ -77,7 +77,10 @@ public record UsageProperties(
      * is refused at startup (the gateway has no transaction to join, so nothing would ever be written), and an OWN sink
      * called inside a transaction refuses at runtime (it would commit usage that the caller's rollback should drop).
      */
-    public record Outbox(String destination, TransactionMode transaction) {}
+    public record Outbox(String destination, TransactionMode transaction, @DefaultValue("TENANT") OutboxOrdering ordering) {}
+
+    /** The ordering the outbox keeps (see {@code OutboxUsageSink.Ordering}); its own enum, so the properties load without the usage-messaging jar. */
+    public enum OutboxOrdering { TENANT, EVENT }
 
     /**
      * {@code enabled} registers the usage consumer as a messaging-inbox handler bean named {@code usageEvents}, so the

@@ -42,7 +42,7 @@ CREATE TABLE plan_limit (
     window_seconds  BIGINT      CHECK (window_seconds > 0),  -- fixed-length periods
     window_months   INT         CHECK (window_months > 0),   -- calendar periods starting on the anchor day
     enforcement     VARCHAR(20) NOT NULL DEFAULT 'REJECT',
-    CONSTRAINT ck_limit_type CHECK (limit_type IN ('RATE', 'QUOTA', 'CONCURRENCY')),
+    CONSTRAINT ck_limit_type CHECK (limit_type IN ('RATE', 'QUOTA', 'CONCURRENCY', 'METER')),
     CONSTRAINT ck_limit_enforcement CHECK (enforcement IN ('REJECT', 'ALLOW_OVERAGE')),
     -- CONCURRENCY has no window; every other limit has exactly one kind of window
     CONSTRAINT ck_limit_window CHECK (

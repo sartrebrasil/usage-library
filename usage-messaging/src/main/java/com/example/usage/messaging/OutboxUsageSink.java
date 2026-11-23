@@ -38,26 +38,43 @@ public final class OutboxUsageSink implements UsageSink {
     public static final String COMPENSATION_TYPE = "usage.compensation";
     /** Header with the platform's event id, for tracing a usage event from the outbox to the ledger. */
     public static final String EVENT_ID_HEADER = "usage-event-id";
-    private static final String AGGREGATE_TYPE = "tenant";
+    private static final String TENANT_AGGREGATE = "tenant";
+    private static final String EVENT_AGGREGATE = "usage-event";
+
+    /**
+     * What the outbox row is the aggregate of: it decides the ordering the relay and the consumer keep.
+     * {@code TENANT} orders all of a tenant's messages one after the other, which a usage and its reversal need; one dead row
+     * then holds back everything behind it for that tenant. {@code EVENT} gives each message its own aggregate: no order between
+     * messages, full parallelism, and a dead row holds back nothing else. The ledger deduplicates by event id, so a host whose
+     * events do not depend on each other (one per processed item) can use {@code EVENT}.
+     */
+    public enum Ordering { TENANT, EVENT }
 
     private final OutboxWriter writer;
     private final String destination;
     private final Executor executor;
     private final Consumer<Runnable> transaction;
     private final BooleanSupplier callerInTransaction;
+    private final Ordering ordering;
 
     private OutboxUsageSink(OutboxWriter writer, String destination, Executor executor, Consumer<Runnable> transaction,
-                            BooleanSupplier callerInTransaction) {
+                            BooleanSupplier callerInTransaction, Ordering ordering) {
         this.writer = writer;
         this.destination = destination;
         this.executor = executor;
         this.transaction = transaction;
         this.callerInTransaction = callerInTransaction;
+        this.ordering = ordering;
+    }
+
+    /** The same sink with another {@link Ordering} (the default is {@code TENANT}). */
+    public OutboxUsageSink orderedBy(Ordering ordering) {
+        return new OutboxUsageSink(writer, destination, executor, transaction, callerInTransaction, ordering);
     }
 
     /** Writes in the transaction already open on the calling thread. */
     public static OutboxUsageSink sameTransaction(OutboxWriter writer, String destination) {
-        return new OutboxUsageSink(writer, destination, Runnable::run, Runnable::run, () -> false);
+        return new OutboxUsageSink(writer, destination, Runnable::run, Runnable::run, () -> false, Ordering.TENANT);
     }
 
     /**
@@ -79,7 +96,7 @@ public final class OutboxUsageSink implements UsageSink {
      */
     public static OutboxUsageSink ownTransaction(OutboxWriter writer, String destination, Executor executor,
                                                  Consumer<Runnable> transaction, BooleanSupplier callerInTransaction) {
-        return new OutboxUsageSink(writer, destination, executor, transaction, callerInTransaction);
+        return new OutboxUsageSink(writer, destination, executor, transaction, callerInTransaction, Ordering.TENANT);
     }
 
     @Override
@@ -98,10 +115,18 @@ public final class OutboxUsageSink implements UsageSink {
 
     private OutboxMessage toOutbox(UsageMessage message) {
         return switch (message) {
-            case UsageEvent e -> new OutboxMessage(UUID.randomUUID(), AGGREGATE_TYPE, e.tenant().value(), null, USAGE_TYPE,
+            case UsageEvent e -> new OutboxMessage(UUID.randomUUID(), aggregateType(), aggregateId(e.tenant().value(), e.eventId()), null, USAGE_TYPE,
                     UsageEventJson.toJson(e), Map.of(EVENT_ID_HEADER, e.eventId().toString()), destination, e.occurredAt());
-            case Compensation c -> new OutboxMessage(UUID.randomUUID(), AGGREGATE_TYPE, c.tenant().value(), null, COMPENSATION_TYPE,
+            case Compensation c -> new OutboxMessage(UUID.randomUUID(), aggregateType(), aggregateId(c.tenant().value(), c.eventId()), null, COMPENSATION_TYPE,
                     UsageEventJson.toJson(c), Map.of(EVENT_ID_HEADER, c.eventId().toString()), destination, c.occurredAt());
         };
+    }
+
+    private String aggregateType() {
+        return ordering == Ordering.EVENT ? EVENT_AGGREGATE : TENANT_AGGREGATE;
+    }
+
+    private String aggregateId(String tenant, UUID eventId) {
+        return ordering == Ordering.EVENT ? eventId.toString() : tenant;
     }
 }

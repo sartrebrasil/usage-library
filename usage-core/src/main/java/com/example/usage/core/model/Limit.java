@@ -9,7 +9,11 @@ import java.util.Objects;
  * subscription (not from the plan assignment), so a plan change swaps limits without moving the cycle.
  */
 public record Limit(Metric metric, Type type, long value, Window window, Enforcement enforcement) {
-    public enum Type { RATE, QUOTA, CONCURRENCY }
+    /**
+     * METER only measures: it makes the ingest keep a per-period summary (what billing reads) for the metric and never takes part
+     * in a decision. It has a window and no value, so a billed metric needs no made-up quota to be summarized.
+     */
+    public enum Type { RATE, QUOTA, CONCURRENCY, METER }
     public enum Enforcement { REJECT, ALLOW_OVERAGE }
 
     public Limit {
@@ -23,6 +27,8 @@ public record Limit(Metric metric, Type type, long value, Window window, Enforce
             throw new IllegalArgumentException("RATE needs a fixed window");
         if (type == Type.RATE && metric.mode() != Metric.Mode.CONSUME_ON_CHECK)
             throw new IllegalArgumentException("RATE applies to access metrics only");
+        if (type == Type.METER && value != 0)
+            throw new IllegalArgumentException("METER only measures: its value must be 0");
         if (type != Type.QUOTA && enforcement != Enforcement.REJECT)
             throw new IllegalArgumentException("only QUOTA may allow overage");
     }

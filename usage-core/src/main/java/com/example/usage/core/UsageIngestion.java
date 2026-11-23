@@ -78,7 +78,7 @@ final class UsageIngestion {
         if (policy.isEmpty()) return List.of();
         Policy p = policy.get();
         return p.limitsFor(e.metricCode()).stream()
-                .filter(l -> l.type() == Type.QUOTA)
+                .filter(l -> l.type() == Type.QUOTA || l.type() == Type.METER) // both get a summary; only QUOTA has a counter
                 .map(l -> new Ledger.Slot(PeriodCalculator.windowKey(l.window()),
                         PeriodCalculator.periodOf(l.window(), p.anchor(), e.occurredAt()), p.plan()))
                 .distinct()

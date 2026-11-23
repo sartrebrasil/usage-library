@@ -42,6 +42,20 @@ class OutboxUsageSinkTest {
     }
 
     @Test
+    void orderedByEventEachMessageIsItsOwnAggregateSoNothingWaitsForAnother() {
+        var writer = new CapturingWriter();
+        var sink = OutboxUsageSink.sameTransaction(writer, "usage-events").orderedBy(OutboxUsageSink.Ordering.EVENT);
+        var other = new UsageEvent(UUID.randomUUID(), T, "API_REQUESTS", 1, Instant.parse("2026-11-19T12:00:00Z"));
+        sink.publish(USAGE).toCompletableFuture().join();
+        sink.publish(other).toCompletableFuture().join();
+
+        assertEquals("usage-event", writer.written.get(0).aggregateType());
+        assertEquals(USAGE.eventId().toString(), writer.written.get(0).aggregateId());
+        assertNotEquals(writer.written.get(0).aggregateId(), writer.written.get(1).aggregateId()); // same tenant, no shared lane
+        assertEquals(USAGE, ((UsageEventJson.Parsed.Usage) UsageEventJson.parse(writer.written.get(0).payload())).event());
+    }
+
+    @Test
     void aUsageEventBecomesAnOutboxMessageKeyedByItsIdAndOrderedByTenant() {
         var writer = new CapturingWriter();
         OutboxUsageSink.sameTransaction(writer, "usage-events").publish(USAGE).toCompletableFuture().join();

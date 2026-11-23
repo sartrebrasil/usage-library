@@ -58,6 +58,10 @@ public final class OverrideAdmin {
                              WHERE tp.tenant_id = :tenant AND tp.valid_to IS NULL AND pl.id = :limit
                             """)).param("tenant", tenantId).param("limit", in.limitId()).query(UUID.class).optional()
                     .orElseThrow(() -> ApiException.notFound("LIMIT_NOT_IN_PLAN", "limit " + in.limitId() + " is not a limit of the plan tenant " + tenantId + " is on"));
+            // a limit that only measures has no value to override (and a value on it would make the policy invalid)
+            if ("METER".equals(ctx.jdbc().sql(ctx.sql("SELECT limit_type FROM {plan_limit} WHERE id = :id")).param("id", in.limitId()).query(String.class).single())) {
+                throw ApiException.badRequest("METER_HAS_NO_VALUE", "a METER limit only measures: there is no value to override");
+            }
             UUID id = UUID.randomUUID();
             try {
                 ctx.jdbc().sql(ctx.sql("INSERT INTO {tenant_limit_override} (id, tenant_plan_id, plan_limit_id, limit_value, reason) VALUES (:id, :tp, :limit, :value, :reason)"))

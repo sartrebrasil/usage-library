@@ -254,6 +254,26 @@ class UsageEngineTest {
     }
 
     @Test
+    void aMeterLimitFeedsTheSummaryAndNeverDecidesAnything() {
+        var e = engine(new Limit(ITEMS, Type.METER, 0, Window.months(1), Enforcement.REJECT));
+        join(e.ingest(event("i1", ITEMS, 3)));
+        join(e.ingest(event("i1", ITEMS, 3))); // the same item: counted once
+        join(e.ingest(event("i2", ITEMS, 4)));
+
+        assertEquals(7, summary("ITEMS_PROCESSED", "m1", "2026-11-01T00:00:00Z").total(), "it is summarised without a quota");
+        assertTrue(join(e.check(T, "ITEMS_PROCESSED", 1000)).allowed(), "no value to exceed: it never refuses");
+        assertTrue(join(e.acquire(T, "ITEMS_PROCESSED", 1)).decision().allowed());
+        join(e.undoCheck(T, "ITEMS_PROCESSED", 1, clock.instant())); // and has no counter to give back: it must not fail
+    }
+
+    @Test
+    void aMeterLimitOnlyMeasuresSoItCarriesNoValue() {
+        assertThrows(IllegalArgumentException.class, () -> new Limit(ITEMS, Type.METER, 5, Window.months(1), Enforcement.REJECT));
+        assertThrows(IllegalArgumentException.class, () -> new Limit(ITEMS, Type.METER, 0, Window.months(1), Enforcement.ALLOW_OVERAGE));
+        assertThrows(IllegalArgumentException.class, () -> new Limit(ITEMS, Type.METER, 0, (Window) null, Enforcement.REJECT)); // it needs a window
+    }
+
+    @Test
     void closedPeriodKeepsItsTotalAndLateUsageIsKeptSeparately() {
         var e = engine(quota(ITEMS, 100, DAY, Enforcement.REJECT));
         join(e.ingest(event("i1", ITEMS, 3)));

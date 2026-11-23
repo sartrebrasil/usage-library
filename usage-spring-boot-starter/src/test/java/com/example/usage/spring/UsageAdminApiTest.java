@@ -317,4 +317,23 @@ class UsageAdminApiTest {
                 .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
         mvc.perform(get("/v1/usage/tenants")).andExpect(status().isUnauthorized()).andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));
     }
+
+    // ---- METER: measuring without a made-up quota -------------------------------------------------
+
+    @Test @Order(15)
+    void aMeterLimitIsDeclaredWithoutAValueAndFeedsTheBillingSummary() throws Exception {
+        body(json(post("/v1/usage/metrics"), "{\"code\":\"BILLED_DOCS\",\"unit\":\"document\",\"countTrigger\":\"ON_FINAL_STATUS\"}"), 201);
+        String plan = id(body(json(post("/v1/usage/plans"), "{\"code\":\"METERED\",\"name\":\"Metered\"}"), 201));
+        body(json(post("/v1/usage/plans/" + plan + "/limits"), "{\"metric\":\"BILLED_DOCS\",\"type\":\"METER\",\"value\":5,\"windowMonths\":1}"), 400); // it carries no value
+        String meter = body(json(post("/v1/usage/plans/" + plan + "/limits"), "{\"metric\":\"BILLED_DOCS\",\"type\":\"METER\",\"windowMonths\":1}"), 201);
+        org.junit.jupiter.api.Assertions.assertEquals("METER", JsonPath.read(meter, "$.type"));
+        org.junit.jupiter.api.Assertions.assertEquals(0, (int) JsonPath.read(meter, "$.value"));
+
+        body(json(post("/v1/usage/tenants"), "{\"id\":\"metered\",\"name\":\"Metered\"}"), 201);
+        body(json(post("/v1/usage/tenants/metered/subscriptions"), "{\"planCode\":\"METERED\",\"planVersion\":1}"), 201);
+        engine.ingest(new UsageEvent(UUID.randomUUID(), new TenantId("metered"), "BILLED_DOCS", 2, Instant.now())).toCompletableFuture().join();
+        org.junit.jupiter.api.Assertions.assertEquals(2,
+                (int) JsonPath.read(body(get("/v1/usage/summaries?tenantId=metered&metric=BILLED_DOCS"), 200), "$.items[0].net"));
+        body(json(post("/v1/usage/tenants/metered/overrides"), "{\"limitId\":\"" + id(meter) + "\",\"value\":9,\"reason\":\"no\"}"), 400); // nothing to override
+    }
 }

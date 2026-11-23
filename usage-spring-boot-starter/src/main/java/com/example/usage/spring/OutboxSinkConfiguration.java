@@ -42,7 +42,7 @@ class OutboxSinkConfiguration {
                 "usage.messaging.outbox.transaction=CALLER cannot be used with usage.gateway.enabled=true: the gateway has no "
                         + "business transaction to join, so no usage would ever be written");
         if (mode == UsageProperties.TransactionMode.CALLER) {
-            return OutboxUsageSink.sameTransaction(writer, outbox.destination());
+            return OutboxUsageSink.sameTransaction(writer, outbox.destination()).orderedBy(ordering(outbox));
         }
         PlatformTransactionManager manager = transactions.getIfUnique();
         Assert.state(manager != null,
@@ -50,6 +50,10 @@ class OutboxSinkConfiguration {
         TransactionTemplate template = new TransactionTemplate(manager);
         return OutboxUsageSink.ownTransaction(writer, outbox.destination(), executor,
                 work -> template.executeWithoutResult(status -> work.run()),
-                TransactionSynchronizationManager::isActualTransactionActive);
+                TransactionSynchronizationManager::isActualTransactionActive).orderedBy(ordering(outbox));
+    }
+
+    private static OutboxUsageSink.Ordering ordering(UsageProperties.Outbox outbox) {
+        return OutboxUsageSink.Ordering.valueOf(outbox.ordering().name());
     }
 }
