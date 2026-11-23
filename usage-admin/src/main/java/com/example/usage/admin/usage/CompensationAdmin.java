@@ -1,4 +1,9 @@
-package com.example.usage.admin;
+package com.example.usage.admin.usage;
+
+import com.example.usage.admin.audit.Audit;
+import com.example.usage.admin.support.AdminContext;
+import com.example.usage.admin.support.AdminException;
+import com.example.usage.admin.support.Check;
 
 import com.example.usage.core.UsageEngine;
 import com.example.usage.core.UsageEngine.Compensate;
@@ -29,7 +34,7 @@ public final class CompensationAdmin {
     private final UsageEngine engine;
     private final UsageQueries queries;
 
-    CompensationAdmin(AdminContext ctx, Audit audit, UsageEngine engine, UsageQueries queries) {
+    public CompensationAdmin(AdminContext ctx, Audit audit, UsageEngine engine, UsageQueries queries) {
         this.ctx = ctx;
         this.audit = audit;
         this.engine = engine;

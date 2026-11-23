@@ -517,6 +517,8 @@ O host aplica as regras na **sua** cadeia de segurança (o módulo não cria uma
 validação de token do host). Uma linha, antes da regra que nega o resto:
 
 ```java
+import com.example.usage.admin.security.UsageAdminRoutes;
+
 SecurityFilterChain security(HttpSecurity http) {
     return ApiSecurity.chain(http, routes -> {
         routes.requestMatchers("/v1/tenants/**").hasAuthority("tenant:admin");
@@ -558,6 +560,10 @@ hora**, pelo `UsageEngine`, sem broker nem outbox: a resposta diz o resultado (`
 `UsageEngine`, e os contadores se movem pelo `CounterStore` do host (com Redis, a cota volta na hora; sem conseguir
 mover o contador, o reconciliador repara métricas de resultado, mas o de uma métrica de acesso só desce ao fim do período).
 Aqui a auditoria é gravada logo **depois** do ledger, não na mesma transação (o ledger é do motor); por isso a repetição a completa.
+
+Pacotes do módulo (`com.example.usage.admin`): `web` (controllers e erros), `tenant` (tenants, assinaturas, overrides),
+`catalog` (métricas, planos, limites), `usage` (pesquisa de uso e compensação), `audit`, `security` (`UsageAdminRoutes`,
+`UsageAdminRoles`) e `support` (paginação, filtros, validação, contexto). A auto-configuração fica na raiz.
 
 Erros são `application/problem+json` com um `code` estável (`TENANT_NOT_FOUND`, `PLAN_IN_USE`, `ALREADY_SUBSCRIBED`,
 `FILTER_REQUIRED`...). Toda escrita grava em `usage_audit` **na mesma transação** da mudança; a tabela é só de

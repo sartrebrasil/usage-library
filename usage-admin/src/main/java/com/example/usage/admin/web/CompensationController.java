@@ -1,4 +1,6 @@
-package com.example.usage.admin;
+package com.example.usage.admin.web;
+
+import com.example.usage.admin.usage.CompensationAdmin;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -10,7 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 /** Present only when the application has a {@code UsageEngine}: the reversal is applied through it. */
 @RestController
 @RequestMapping("${usage.admin.base-path:/v1/usage}/compensations")
-class CompensationController {
+public class CompensationController {
     private final CompensationAdmin compensations;
 
     CompensationController(CompensationAdmin compensations) {

@@ -1,4 +1,4 @@
-package com.example.usage.admin;
+package com.example.usage.admin.security;
 
 /** The authorities the API checks, in the engine's {@code <domain>:<action>} style. Platform roles: never hand them to a tenant's client. */
 public final class UsageAdminRoles {

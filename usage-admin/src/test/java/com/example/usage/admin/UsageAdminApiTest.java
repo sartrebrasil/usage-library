@@ -1,5 +1,6 @@
 package com.example.usage.admin;
 
+import com.example.usage.admin.security.UsageAdminRoutes;
 import com.example.usage.core.UsageEngine;
 import com.example.usage.core.UsageEngine.FailMode;
 import com.example.usage.core.memory.CachedPolicyStore;

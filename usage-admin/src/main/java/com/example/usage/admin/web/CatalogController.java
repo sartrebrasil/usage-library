@@ -1,4 +1,8 @@
-package com.example.usage.admin;
+package com.example.usage.admin.web;
+
+import com.example.usage.admin.catalog.MetricAdmin;
+import com.example.usage.admin.catalog.PlanAdmin;
+import com.example.usage.admin.support.Page;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
@@ -9,7 +13,7 @@ import java.util.UUID;
 /** The catalog: metrics, plans and their limits. */
 @RestController
 @RequestMapping("${usage.admin.base-path:/v1/usage}")
-class CatalogController {
+public class CatalogController {
     private final MetricAdmin metrics;
     private final PlanAdmin plans;
 

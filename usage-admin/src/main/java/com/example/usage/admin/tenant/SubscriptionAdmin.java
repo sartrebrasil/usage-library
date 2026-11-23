@@ -1,4 +1,8 @@
-package com.example.usage.admin;
+package com.example.usage.admin.tenant;
+
+import com.example.usage.admin.audit.Audit;
+import com.example.usage.admin.support.AdminContext;
+import com.example.usage.admin.support.AdminException;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -29,7 +33,7 @@ public final class SubscriptionAdmin {
     private final Audit audit;
     private final TenantAdmin tenants;
 
-    SubscriptionAdmin(AdminContext ctx, Audit audit, TenantAdmin tenants) {
+    public SubscriptionAdmin(AdminContext ctx, Audit audit, TenantAdmin tenants) {
         this.ctx = ctx;
         this.audit = audit;
         this.tenants = tenants;

@@ -1,4 +1,11 @@
-package com.example.usage.admin;
+package com.example.usage.admin.tenant;
+
+import com.example.usage.admin.audit.Audit;
+import com.example.usage.admin.support.AdminContext;
+import com.example.usage.admin.support.AdminException;
+import com.example.usage.admin.support.Check;
+import com.example.usage.admin.support.Page;
+import com.example.usage.admin.support.Where;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -22,7 +29,7 @@ public final class TenantAdmin {
     private final AdminContext ctx;
     private final Audit audit;
 
-    TenantAdmin(AdminContext ctx, Audit audit) {
+    public TenantAdmin(AdminContext ctx, Audit audit) {
         this.ctx = ctx;
         this.audit = audit;
     }

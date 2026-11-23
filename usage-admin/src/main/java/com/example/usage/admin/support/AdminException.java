@@ -1,4 +1,4 @@
-package com.example.usage.admin;
+package com.example.usage.admin.support;
 
 import org.springframework.http.HttpStatus;
 

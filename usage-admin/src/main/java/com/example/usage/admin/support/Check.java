@@ -1,22 +1,22 @@
-package com.example.usage.admin;
+package com.example.usage.admin.support;
 
 import java.util.Set;
 
 /** Input checks that answer 400 with a code naming the field. */
-final class Check {
+public final class Check {
     private Check() {}
 
-    static String text(String value, String field, int max) {
+    public static String text(String value, String field, int max) {
         if (value == null || value.isBlank()) throw AdminException.invalid("FIELD_REQUIRED", field + " is required");
         if (value.length() > max) throw AdminException.invalid("FIELD_TOO_LONG", field + " is longer than " + max);
         return value.strip();
     }
 
-    static String optionalText(String value, String field, int max) {
+    public static String optionalText(String value, String field, int max) {
         return value == null || value.isBlank() ? null : text(value, field, max);
     }
 
-    static String oneOf(String value, Set<String> allowed, String field) {
+    public static String oneOf(String value, Set<String> allowed, String field) {
         if (value == null || !allowed.contains(value)) throw AdminException.invalid("INVALID_" + field.toUpperCase(), field + " must be one of " + allowed);
         return value;
     }

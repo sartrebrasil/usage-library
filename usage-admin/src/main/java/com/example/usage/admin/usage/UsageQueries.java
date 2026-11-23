@@ -1,4 +1,9 @@
-package com.example.usage.admin;
+package com.example.usage.admin.usage;
+
+import com.example.usage.admin.support.AdminContext;
+import com.example.usage.admin.support.AdminException;
+import com.example.usage.admin.support.Page;
+import com.example.usage.admin.support.Where;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -21,7 +26,7 @@ public final class UsageQueries {
 
     private final AdminContext ctx;
 
-    UsageQueries(AdminContext ctx) {
+    public UsageQueries(AdminContext ctx) {
         this.ctx = ctx;
     }
 

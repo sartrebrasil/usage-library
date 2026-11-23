@@ -1,4 +1,6 @@
-package com.example.usage.admin;
+package com.example.usage.admin.web;
+
+import com.example.usage.admin.support.AdminException;
 
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.DuplicateKeyException;
@@ -9,7 +11,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /** Errors of the admin controllers as RFC 9457 problem details with a stable {@code code}. Scoped to this package: the host's own controllers are untouched. */
 @RestControllerAdvice(basePackageClasses = AdminErrors.class)
-class AdminErrors {
+public class AdminErrors {
 
     @ExceptionHandler(AdminException.class)
     ProblemDetail admin(AdminException e) {

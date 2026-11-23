@@ -1,4 +1,8 @@
-package com.example.usage.admin;
+package com.example.usage.admin.audit;
+
+import com.example.usage.admin.support.AdminContext;
+import com.example.usage.admin.support.Page;
+import com.example.usage.admin.support.Where;
 
 import org.springframework.jdbc.core.simple.JdbcClient;
 import tools.jackson.databind.JsonNode;
@@ -19,14 +23,14 @@ public final class Audit {
     private final JsonMapper json;
     private final Supplier<String> actor;
 
-    Audit(AdminContext ctx, JsonMapper json, Supplier<String> actor) {
+    public Audit(AdminContext ctx, JsonMapper json, Supplier<String> actor) {
         this.ctx = ctx;
         this.json = json;
         this.actor = actor;
     }
 
     /** Call inside the transaction of the change, so either both are recorded or neither. */
-    void record(String action, String entityType, Object entityId, String tenantId, Object before, Object after, String reason) {
+    public void record(String action, String entityType, Object entityId, String tenantId, Object before, Object after, String reason) {
         ctx.jdbc().sql(ctx.sql("""
                         INSERT INTO {usage_audit} (id, actor, action, entity_type, entity_id, tenant_id, before_state, after_state, reason)
                         VALUES (:id, :actor, :action, :type, :entity, :tenant, CAST(:before AS jsonb), CAST(:after AS jsonb), :reason)
@@ -41,7 +45,7 @@ public final class Audit {
     }
 
     /** Whether a change to this entity was already recorded with this action: lets a retry complete a trail that was cut short. */
-    boolean recorded(String action, String entityType, Object entityId) {
+    public boolean recorded(String action, String entityType, Object entityId) {
         return ctx.jdbc().sql(ctx.sql("SELECT EXISTS (SELECT 1 FROM {usage_audit} WHERE action = :action AND entity_type = :type AND entity_id = :entity)"))
                 .param("action", action).param("type", entityType).param("entity", String.valueOf(entityId)).query(Boolean.class).single();
     }

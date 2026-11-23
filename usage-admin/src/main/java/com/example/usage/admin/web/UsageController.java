@@ -1,4 +1,8 @@
-package com.example.usage.admin;
+package com.example.usage.admin.web;
+
+import com.example.usage.admin.audit.Audit;
+import com.example.usage.admin.support.Page;
+import com.example.usage.admin.usage.UsageQueries;
 
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.format.annotation.DateTimeFormat.ISO;
@@ -14,7 +18,7 @@ import java.util.UUID;
 /** Read-only: what was consumed, and who changed what. */
 @RestController
 @RequestMapping("${usage.admin.base-path:/v1/usage}")
-class UsageController {
+public class UsageController {
     private final UsageQueries queries;
     private final Audit audit;
 

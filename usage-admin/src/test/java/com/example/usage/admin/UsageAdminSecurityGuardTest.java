@@ -1,5 +1,6 @@
 package com.example.usage.admin;
 
+import com.example.usage.admin.tenant.TenantAdmin;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.WebApplicationContextRunner;

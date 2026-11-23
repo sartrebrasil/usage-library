@@ -1,4 +1,9 @@
-package com.example.usage.admin;
+package com.example.usage.admin.web;
+
+import com.example.usage.admin.support.Page;
+import com.example.usage.admin.tenant.OverrideAdmin;
+import com.example.usage.admin.tenant.SubscriptionAdmin;
+import com.example.usage.admin.tenant.TenantAdmin;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
@@ -9,7 +14,7 @@ import java.util.UUID;
 /** Tenants, their subscription, their plan and their limit overrides. */
 @RestController
 @RequestMapping("${usage.admin.base-path:/v1/usage}/tenants")
-class TenantsController {
+public class TenantsController {
     private final TenantAdmin tenants;
     private final SubscriptionAdmin subscriptions;
     private final OverrideAdmin overrides;

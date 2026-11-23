@@ -1,4 +1,11 @@
-package com.example.usage.admin;
+package com.example.usage.admin.catalog;
+
+import com.example.usage.admin.audit.Audit;
+import com.example.usage.admin.support.AdminContext;
+import com.example.usage.admin.support.AdminException;
+import com.example.usage.admin.support.Check;
+import com.example.usage.admin.support.Page;
+import com.example.usage.admin.support.Where;
 
 import com.example.usage.core.model.Limit;
 import com.example.usage.core.model.Limit.Enforcement;
@@ -47,7 +54,7 @@ public final class PlanAdmin {
     private final AdminContext ctx;
     private final Audit audit;
 
-    PlanAdmin(AdminContext ctx, Audit audit) {
+    public PlanAdmin(AdminContext ctx, Audit audit) {
         this.ctx = ctx;
         this.audit = audit;
     }

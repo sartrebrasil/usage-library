@@ -1,4 +1,4 @@
-package com.example.usage.admin;
+package com.example.usage.admin.security;
 
 import org.springframework.beans.factory.ListableBeanFactory;
 
@@ -7,13 +7,13 @@ import org.springframework.beans.factory.ListableBeanFactory;
  * consume and what is billed, and the module does not authenticate anyone itself: an application that forgot
  * {@link UsageAdminRoutes} would expose it to everybody.
  */
-final class UsageAdminSecurityGuard {
+public final class UsageAdminSecurityGuard {
     private static final System.Logger LOG = System.getLogger(UsageAdminSecurityGuard.class.getName());
     private static final String CHAIN = "org.springframework.security.web.SecurityFilterChain";
 
     private UsageAdminSecurityGuard() {}
 
-    static UsageAdminSecurityGuard verify(ListableBeanFactory beans, boolean allowUnsecured) {
+    public static UsageAdminSecurityGuard verify(ListableBeanFactory beans, boolean allowUnsecured) {
         if (allowUnsecured) {
             LOG.log(System.Logger.Level.WARNING, "usage.admin.allow-unsecured=true: the usage management API relies on protection outside this application");
             return new UsageAdminSecurityGuard();
