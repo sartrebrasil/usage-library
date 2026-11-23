@@ -90,3 +90,10 @@ Redis no `docker-compose` (e `host.docker.internal:6379` no kind, como Postgres 
 8. **`HttpPolicyStore` e `PolicyJson` num módulo novo `usage-client`** (leve: `RestClient` do Spring e Jackson), para o `outcome-api` não puxar o admin; o `HttpPolicyStore` recebe o `RestClient` do host (o `ServiceClient` OAuth do engine).
 9. **A rota de política no `usage-admin`**, `GET /internal/policies/{tenant}`, com a role própria **`usage:policy-read`** (não reaproveita `usage:read`, que abre tudo); `UsageAdminRoutes` ganha a regra.
 
+## 7. F1 feita (2026-11-23, sem commit)
+
+Implementado na biblioteca, com testes: `Decision.retryAfter` (também no `UsageGatewayFilter`, que responde `Retry-After`); `check`/`undoCheck` por tipo de limite; `CachedPolicyStore` com stale-if-error; módulo
+`usage-client` (`PolicyJson`, `HttpPolicyStore.cached`); `GET /internal/policies/{tenant}` com a role `usage:policy-read` no `usage-admin`; no starter, `UsageAdmission`, `UsageDenied` e `usage.admission.metric`,
+o `Ledger` opcional (motor só de decisão) e a métrica `usage.quota.ratio`. A corrida pelo último item (40 chamadas simultâneas para 5 unidades dá exatamente 5) e a devolução no rollback foram testadas contra um Redis real.
+Falta da F1 só o L7, que é configuração do usage-api (F2: `counters=redis` e a manutenção ligada).
+
