@@ -25,7 +25,8 @@ public record UsageProperties(
         @DefaultValue Maintenance maintenance,
         @DefaultValue Messaging messaging,
         @DefaultValue Telemetry telemetry,
-        @DefaultValue Admin admin) {
+        @DefaultValue Admin admin,
+        @DefaultValue Admission admission) {
     public UsageProperties {
         requirePositive(concurrencyLease, "usage.concurrency-lease");
         requireNotNegative(policyCacheTtl, "usage.policy-cache-ttl");
@@ -52,6 +53,13 @@ public record UsageProperties(
             if (basePath == null || !basePath.startsWith("/")) throw new IllegalArgumentException("usage.admin.base-path must start with /");
         }
     }
+
+    /**
+     * The {@code UsageAdmission} a servlet service calls to decide with the engine.
+     *
+     * @param metric the metric whose rate and quota it applies (a request accepted counts one); setting it turns the bean on
+     */
+    public record Admission(String metric) {}
 
     /** write=false takes tenant creation and changes out of the API, for a host that owns them (the API then only lists tenants). */
     public record Tenants(@DefaultValue("true") boolean write) {}

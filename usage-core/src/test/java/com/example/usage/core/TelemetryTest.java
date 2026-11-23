@@ -42,6 +42,7 @@ class TelemetryTest {
         final List<Ended> ended = new ArrayList<>();
         final Map<String, Long> counts = new LinkedHashMap<>();
         final Map<String, Supplier<Number>> gauges = new LinkedHashMap<>();
+        final List<Double> recorded = new ArrayList<>();
 
         @Override public Op start(String name, String... tags) {
             Map<String, String> t = new LinkedHashMap<>();
@@ -57,6 +58,7 @@ class TelemetryTest {
             counts.merge(name + String.join(",", tags), amount, Long::sum);
         }
         @Override public void gauge(String name, Supplier<Number> value, String... tags) { gauges.put(name, value); }
+        @Override public void record(String name, double value, String... tags) { if (name.equals("quota.ratio")) recorded.add(value); }
     }
 
     UsageEngine engine(UsageTelemetry telemetry, Limit... limits) {
@@ -77,6 +79,16 @@ class TelemetryTest {
         assertEquals("denied", rec.ended.get(1).tags().get("result"));
         assertEquals("quota_exceeded", rec.ended.get(1).tags().get("reason"));
         rec.ended.forEach(o -> assertFalse(o.tags().containsValue(T.value()), "a tenant id is unbounded: never a tag"));
+    }
+
+    @Test
+    void aQuotaCheckReportsHowFullTheQuotaIs() {
+        var rec = new Recorder();
+        var e = engine(rec, new Limit(API, Type.QUOTA, 4, Duration.ofDays(1), Enforcement.REJECT));
+        e.check(T, "API_REQUESTS", 1).toCompletableFuture().join();
+        e.check(T, "API_REQUESTS", 2).toCompletableFuture().join();
+        e.check(T, "API_REQUESTS", 2).toCompletableFuture().join(); // refused: still says how full it is
+        assertEquals(List.of(0.25, 0.75, 0.75), rec.recorded);
     }
 
     @Test

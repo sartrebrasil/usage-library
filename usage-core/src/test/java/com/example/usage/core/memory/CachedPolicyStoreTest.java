@@ -88,4 +88,34 @@ class CachedPolicyStoreTest {
     void theBoundMustBePositive() {
         assertThrows(IllegalArgumentException.class, () -> new CachedPolicyStore(t -> null, clock, Duration.ofMinutes(1), 0));
     }
+
+    @Test
+    void aFailingDelegateServesTheLastGoodPolicyUntilItGetsTooOld() {
+        var down = new java.util.concurrent.atomic.AtomicBoolean();
+        var store = new CachedPolicyStore(t -> down.get() ? CompletableFuture.failedFuture(new IllegalStateException("usage-api down"))
+                : CompletableFuture.completedFuture(Optional.of(P)), clock, Duration.ofMinutes(1), 100,
+                com.example.usage.core.spi.UsageTelemetry.NOOP, Duration.ofMinutes(30));
+        assertEquals(Optional.of(P), store.policyFor(T).toCompletableFuture().join());
+
+        down.set(true);
+        clock.now = clock.now.plus(Duration.ofMinutes(2)); // the entry expired and the delegate is down
+        assertEquals(Optional.of(P), store.policyFor(T).toCompletableFuture().join(), "the last good policy, not the failure");
+
+        clock.now = clock.now.plus(Duration.ofMinutes(40)); // older than the 30 minutes the host accepts
+        assertThrows(CompletionException.class, () -> store.policyFor(T).toCompletableFuture().join());
+
+        down.set(false); // and it recovers on its own
+        assertEquals(Optional.of(P), store.policyFor(T).toCompletableFuture().join());
+    }
+
+    @Test
+    void withoutStaleTimeAFailureIsAFailureAsBefore() {
+        var down = new java.util.concurrent.atomic.AtomicBoolean();
+        var store = new CachedPolicyStore(t -> down.get() ? CompletableFuture.failedFuture(new IllegalStateException("down"))
+                : CompletableFuture.completedFuture(Optional.of(P)), clock, Duration.ofMinutes(1));
+        store.policyFor(T).toCompletableFuture().join();
+        down.set(true);
+        clock.now = clock.now.plus(Duration.ofMinutes(2));
+        assertThrows(CompletionException.class, () -> store.policyFor(T).toCompletableFuture().join());
+    }
 }

@@ -8,6 +8,8 @@ public final class UsageAdminRoles {
     public static final String READ = "usage:read";
     /** Changes to tenants, metrics, plans, limits, subscriptions and overrides. */
     public static final String WRITE = "usage:write";
+    /** The policy of a tenant ({@code GET /internal/policies/{tenant}}), for the service that decides with the engine: it opens nothing else. */
+    public static final String POLICY_READ = "usage:policy-read";
     /** Manual compensation: it changes what will be billed, so it has a role of its own. */
     public static final String COMPENSATE = "usage:compensate";
 }

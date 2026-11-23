@@ -25,6 +25,7 @@ public final class UsageAdminRoutes {
     /** @param basePath the same value as {@code usage.admin.base-path} */
     public static AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry apply(AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry routes, String basePath) {
         return routes
+                .requestMatchers(HttpMethod.GET, "/internal/policies/*").hasAuthority(UsageAdminRoles.POLICY_READ)
                 .requestMatchers(HttpMethod.POST, basePath + "/compensations").hasAuthority(UsageAdminRoles.COMPENSATE)
                 .requestMatchers(HttpMethod.GET, basePath + "/**").hasAuthority(UsageAdminRoles.READ)
                 .requestMatchers(basePath + "/**").hasAuthority(UsageAdminRoles.WRITE);

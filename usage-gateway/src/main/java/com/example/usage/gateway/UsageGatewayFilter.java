@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
@@ -22,6 +23,7 @@ import reactor.core.publisher.Mono;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
@@ -115,7 +117,8 @@ public final class UsageGatewayFilter implements GlobalFilter, Ordered {
                     int last = decisions.size() - 1;
                     if (!decisions.get(last).allowed()) {
                         String reason = decisions.get(last).reason();
-                        return giveBack(tenant, last, cost, at, decisions).then(Mono.defer(() -> reject(exchange, statusFor(reason), reason)));
+                        Duration retryAfter = decisions.get(last).retryAfter();
+                        return giveBack(tenant, last, cost, at, decisions).then(Mono.defer(() -> reject(exchange, statusFor(reason), reason, retryAfter)));
                     }
                     Plan plan = decisions.stream().map(Decision::plan).filter(Objects::nonNull).findFirst().orElse(null);
                     return forward(tenant, exchange, chain, decisions.stream().anyMatch(Decision::overage), plan, at, cost);
@@ -210,8 +213,14 @@ public final class UsageGatewayFilter implements GlobalFilter, Ordered {
     }
 
     private static Mono<Void> reject(ServerWebExchange exchange, HttpStatus status, String code) {
+        return reject(exchange, status, code, null);
+    }
+
+    /** {@code retryAfter}, when the refusal has one, goes out as Retry-After in whole seconds, rounded up (at least 1). */
+    private static Mono<Void> reject(ServerWebExchange exchange, HttpStatus status, String code, Duration retryAfter) {
         ServerHttpResponse response = exchange.getResponse();
         response.setStatusCode(status);
+        if (retryAfter != null) response.getHeaders().set(HttpHeaders.RETRY_AFTER, Long.toString(Math.max(1, (retryAfter.toMillis() + 999) / 1000)));
         response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
         byte[] body = ("{\"error\":\"" + code + "\"}").getBytes(StandardCharsets.UTF_8);
         return response.writeWith(Mono.just(response.bufferFactory().wrap(body)));

@@ -93,6 +93,23 @@ class UsageAutoConfigurationTest {
     }
 
     @Test
+    void anApplicationThatOnlyDecidesNeedsNoLedgerAndGetsTheAdmissionWhenAsked() {
+        // no usage-postgres, no Ledger bean: the engine still exists (it decides), and ingest says why it cannot
+        new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(UsageAutoConfiguration.class))
+                .withBean(PolicyStore.class, () -> tenant -> CompletableFuture.completedFuture(Optional.empty()))
+                .withPropertyValues("usage.counters.type=memory", "usage.admission.metric=DOCUMENTS")
+                .run(ctx -> {
+                    assertThat(ctx).hasNotFailed().hasSingleBean(UsageEngine.class).hasSingleBean(UsageAdmission.class);
+                    var ingest = ctx.getBean(UsageEngine.class).ingest(new com.example.usage.core.model.UsageEvent(java.util.UUID.randomUUID(),
+                            new TenantId("acme"), "DOCUMENTS", 1, Instant.now())).toCompletableFuture();
+                    assertThat(ingest).failsWithin(java.time.Duration.ofSeconds(1)).withThrowableThat().withCauseInstanceOf(UnsupportedOperationException.class);
+                    assertThat(ctx.getBean(UsageAdmission.class)).isNotNull();
+                });
+        runner.run(ctx -> assertThat(ctx).doesNotHaveBean(UsageAdmission.class)); // off unless usage.admission.metric is set
+    }
+
+    @Test
     void failModeComesFromPropertiesAndReachesTheEngine() {
         CounterStore down = new CounterStore() {
             public java.util.concurrent.CompletionStage<Result> add(String k, long d, long c, Duration t) { return CompletableFuture.failedFuture(new IllegalStateException("down")); }

@@ -107,6 +107,7 @@ Duas coisas que o billing precisa saber antes de ler a tabela:
 | `usage-messaging` | Liga a plataforma a um broker pela **sua** `messaging-library` (inbox) e `outbox-library`: um handler da inbox e um `UsageSink` sobre o outbox. Não tem código de broker | core, consumer, `messaging-inbox`, `outbox-core` |
 | `usage-bom` | Só as versões de todos os módulos, para importar (sem pai, sem o BOM do Boot) | — |
 | `usage-demo` | Aplicação Spring Cloud Gateway pronta para rodar, com docker-compose; veja [usage-demo/README.md](usage-demo/README.md) | o starter e os adaptadores |
+| `usage-client` | Um `PolicyStore` que lê a política do tenant da API do usage (`HttpPolicyStore`, sobre o `RestClient` do host) e o contrato JSON da política (`PolicyJson`). Para um serviço que decide com o motor sem guardar planos | core |
 | `usage-admin` | API de gestão (Spring MVC): manutenção, listagem e pesquisa, auditoria e compensação manual. Biblioteca simples: quem a liga é o starter (`usage.admin.*`). Veja "API de gestão" | core, postgres |
 | `usage-spring-boot-starter` | Auto-configuração a partir de propriedades `usage.*` | os acima (opcionais) |
 
@@ -427,6 +428,12 @@ Qualquer bean que você definir (`UsageEngine`, `CounterStore`, `PolicyStore`...
 
 `usage.admin.enabled`, `.base-path`, `.tenants.write` e `.allow-unsecured`: descritas na seção "API de gestão (`usage-admin`)". São do starter, como as demais.
 
+### Admissão (serviço que decide com o motor)
+
+| Propriedade | Tipo | Padrão | Descrição |
+|---|---|---|---|
+| `usage.admission.metric` | texto | — | Liga o `UsageAdmission` (veja "Um serviço MVC que decide com o motor"): a métrica cujos limites de taxa (`admit`) e de cota (`consume`) ele aplica, uma unidade por pedido aceito. Precisa de `spring-tx` no classpath |
+
 ### Exemplos de configuração
 
 **Desenvolvimento local / testes** (sem Redis, sem broker; só o gateway medindo em memória):
@@ -488,6 +495,43 @@ usage:
     interval: 10m
 ```
 
+## Um serviço MVC que decide com o motor
+
+Um serviço servlet que aceita trabalho (um documento, um pedido) e quer aplicar limites **sem guardar planos nem contadores próprios** usa três peças, nenhuma delas um filtro:
+a política vem da API do usage (`usage-client`), os contadores ficam no Redis (`usage-redis`) e o serviço chama o `UsageAdmission` do starter em dois pontos.
+
+```yaml
+usage:
+  counters: { type: redis }
+  redis:    { uri: redis://redis:6379 }
+  admission: { metric: DOCUMENTS }      # liga o UsageAdmission
+  fail-mode: OPEN                       # Redis ou política fora: a requisição passa (CLOSED recusa)
+```
+
+```java
+@Bean PolicyStore policies(RestClient usageApi, Clock clock) {           // o RestClient é do host: URL base e o token OAuth
+    return HttpPolicyStore.cached(usageApi, executor, clock, Duration.ofMinutes(1), Duration.ofMinutes(30), UsageTelemetry.NOOP);
+}                                                                          // 1 min de cache; vale o último lido por até 30 min se a API cair
+
+// cedo, antes de gastar trabalho: só os limites de taxa; recusa o tenant sem assinatura
+admission.admit(tenant);
+
+// tarde, dentro da transação que grava o trabalho aceito: só a cota; se a transação voltar, a cota volta
+transaction.executeWithoutResult(status -> {
+    Instant at = admission.consume(tenant);       // devolve o instante: use-o no evento de uso
+    repository.insert(document);
+    usageSink.publish(new UsageEvent(id, tenant, "DOCUMENTS", 1, at));
+});
+```
+
+- `UsageDenied` (`kind`: `RATE_LIMITED`, `QUOTA_EXCEEDED`, `SUBSCRIPTION_REQUIRED`, `UNAVAILABLE`; `retryAfterSeconds()`): o serviço o traduz no seu próprio erro (um `429` com `Retry-After`, um `403`...).
+- **O contador é atômico no Redis** (dois pods nunca passam do teto), mas **não** é parte da transação do banco: uma queda entre `consume` e o commit deixa o contador uma unidade acima até o fim do período. O evento de uso do aceite alimenta o resumo, e o reconciliador sobe o contador de volta se o Redis for perdido (o de acesso só sobe: nunca lê abaixo do ledger).
+- **Sem `usage-postgres`** o starter cria o motor sem ledger (só decide): `ingest` e compensação dizem por quê.
+- A API do usage serve a política em `GET /internal/policies/{tenant}`, sob a role `usage:policy-read` (só ela; não abre a gestão).
+- `Decision.retryAfter` (quanto falta para o período da cota ou da janela de taxa acabar) vale também para o `UsageGatewayFilter`, que responde `429` com `Retry-After`.
+- `UsageEngine.check(..., Set<Limit.Type>)` e `undoCheck(..., Set<Limit.Type>)` aplicam e devolvem só certos tipos de limite.
+- Métrica `usage.quota.ratio` (distribuição, por métrica): quanto da cota estava usada em cada verificação; alerte sobre o máximo.
+
 ## API de gestão (`usage-admin`)
 
 Módulo Spring **WebMVC** com os endpoints de manutenção, listagem e pesquisa. Como os demais adaptadores, é uma biblioteca simples e **quem a liga é o
@@ -520,6 +564,7 @@ Padrão `<domínio>:<ação>`, como as do engine. São roles de **plataforma**: 
 | `usage:read` | Todo `GET`: listagens, pesquisas, resumo de uso, eventos e auditoria |
 | `usage:write` | `POST`/`PUT`/`PATCH`/`DELETE` de tenants, métricas, planos, limites, assinaturas e overrides |
 | `usage:compensate` | `POST /compensations`: altera o que será cobrado, por isso é separada |
+| `usage:policy-read` | só `GET /internal/policies/{tenant}`: a política do tenant, para o serviço que decide com o motor; não abre nada da gestão |
 
 O host aplica as regras na **sua** cadeia de segurança (o módulo não cria uma, para não perder o formato de erro e a
 validação de token do host). Uma linha, antes da regra que nega o resto:

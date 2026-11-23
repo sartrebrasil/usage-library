@@ -17,6 +17,7 @@
     <module>usage-consumer</module>
     <module>usage-redis</module>
     <module>usage-postgres</module>
+    <module>usage-client</module>
     <module>usage-messaging</module>
     <module>usage-admin</module>
     <module>usage-spring-boot-starter</module>

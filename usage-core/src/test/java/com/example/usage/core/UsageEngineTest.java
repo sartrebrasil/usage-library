@@ -254,6 +254,46 @@ class UsageEngineTest {
     }
 
     @Test
+    void aRefusalSaysHowLongUntilItsPeriodEnds() {
+        var e = engine(quota(API, 1, DAY, Enforcement.REJECT), rate(1, Duration.ofMinutes(1)));
+        assertTrue(join(e.check(T, "API_REQUESTS", 1)).allowed());
+        clock.advance(Duration.ofSeconds(20));
+        var rateRefusal = join(e.check(T, "API_REQUESTS", 1));
+        assertEquals("rate_limited", rateRefusal.reason());
+        assertEquals(Duration.ofSeconds(40), rateRefusal.retryAfter(), "the rate window of the minute ends in 40 s");
+        clock.advance(Duration.ofHours(6));
+        var quotaRefusal = join(e.check(T, "API_REQUESTS", 1));
+        assertEquals("quota_exceeded", quotaRefusal.reason());
+        assertEquals(Duration.ofHours(18).minusSeconds(20), quotaRefusal.retryAfter(), "the day of the quota started at midnight");
+        assertNull(join(e.check(T, "UNKNOWN", 1)).retryAfter(), "an allowed decision has none");
+    }
+
+    @Test
+    void aCheckOfSomeTypesLeavesTheOthersAloneAndTheirUndoGivesBackOnlyThose() {
+        var e = engine(rate(1, Duration.ofMinutes(1)), quota(API, 2, DAY, Enforcement.REJECT));
+        var rateOnly = java.util.EnumSet.of(Type.RATE);
+        var quotaOnly = java.util.EnumSet.of(Type.QUOTA);
+
+        assertTrue(join(e.check(T, "API_REQUESTS", 1, clock.instant(), rateOnly)).allowed());
+        assertEquals("rate_limited", join(e.check(T, "API_REQUESTS", 1, clock.instant(), rateOnly)).reason());
+        // the quota was not touched by the rate checks, and the rate is not touched by the quota checks
+        assertTrue(join(e.check(T, "API_REQUESTS", 1, clock.instant(), quotaOnly)).allowed());
+        assertTrue(join(e.check(T, "API_REQUESTS", 1, clock.instant(), quotaOnly)).allowed());
+        assertEquals("quota_exceeded", join(e.check(T, "API_REQUESTS", 1, clock.instant(), quotaOnly)).reason());
+
+        join(e.undoCheck(T, "API_REQUESTS", 1, clock.instant(), quotaOnly)); // one quota unit back, the rate token stays taken
+        assertTrue(join(e.check(T, "API_REQUESTS", 1, clock.instant(), quotaOnly)).allowed());
+        assertEquals("rate_limited", join(e.check(T, "API_REQUESTS", 1, clock.instant(), rateOnly)).reason());
+    }
+
+    @Test
+    void noPolicyRefusesWhateverTypesAreAsked() {
+        PolicyStore none = t -> done(Optional.empty());
+        var e = new UsageEngine(none, counters, ledger, x -> done(null), clock, FailMode.OPEN, Duration.ofMinutes(15));
+        assertEquals("no_policy", join(e.check(T, "API_REQUESTS", 1, clock.instant(), java.util.EnumSet.of(Type.RATE))).reason());
+    }
+
+    @Test
     void aMeterLimitFeedsTheSummaryAndNeverDecidesAnything() {
         var e = engine(new Limit(ITEMS, Type.METER, 0, Window.months(1), Enforcement.REJECT));
         join(e.ingest(event("i1", ITEMS, 3)));

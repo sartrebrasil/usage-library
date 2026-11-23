@@ -44,6 +44,11 @@ final class MicrometerUsageTelemetry implements UsageTelemetry {
     }
 
     @Override
+    public void record(String name, double value, String... tags) {
+        io.micrometer.core.instrument.DistributionSummary.builder("usage." + name).tags(tags).register(meters).record(value);
+    }
+
+    @Override
     public void gauge(String name, Supplier<Number> value, String... tags) {
         Gauge.builder("usage." + name, value).tags(Tags.of(tags)).strongReference(true).register(meters);
     }

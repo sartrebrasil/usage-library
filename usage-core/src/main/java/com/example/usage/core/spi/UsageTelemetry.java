@@ -34,5 +34,8 @@ public interface UsageTelemetry {
 
     default void time(String name, Duration duration, String... tags) {}
 
+    /** A measured value that is neither a count nor a duration, for a distribution (a ratio, a size). */
+    default void record(String name, double value, String... tags) {}
+
     default void gauge(String name, Supplier<Number> value, String... tags) {}
 }

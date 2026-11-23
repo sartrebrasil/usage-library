@@ -41,11 +41,19 @@ import java.util.concurrent.Executors;
         ProcessorConfiguration.class,
         ConsumerConfiguration.class,
         AdminConfiguration.class,
+        AdmissionConfiguration.class,
         MissingJarFailures.class,
         OutboxSinkConfiguration.class,
         InboxHandlerConfiguration.class,
         MaintenanceConfiguration.class})
 public class UsageAutoConfiguration {
+    /**
+     * For an application that only decides (rate and quota with the engine) and keeps no ledger: the engine needs one, but never
+     * touches it for a check. Ingest and compensation refuse, saying why.
+     */
+    private static final Ledger DECISIONS_ONLY = (event, slots) -> CompletableFuture.failedFuture(
+            new UnsupportedOperationException("this application has no ledger (no usage-postgres): it only decides"));
+
     static final String EXECUTOR = "usageExecutor";
 
     @Bean
@@ -63,7 +71,7 @@ public class UsageAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    UsageEngine usageEngine(PolicyStore policies, CounterStore counters, Ledger ledger, ObjectProvider<UsageSink> sink,
+    UsageEngine usageEngine(PolicyStore policies, CounterStore counters, ObjectProvider<Ledger> ledger, ObjectProvider<UsageSink> sink,
                             Clock clock, UsageProperties props, ObjectProvider<UsageTelemetry> telemetry) {
         UsageSink unique = sink.getIfUnique();
         // the gateway publishes every usage event and refund through the sink: without a durable one it would
@@ -72,7 +80,7 @@ public class UsageAutoConfiguration {
                 "usage.gateway.enabled=true needs exactly one UsageSink bean (your durable outbox) to publish usage events");
         UsageSink usageSink = unique != null ? unique : message -> CompletableFuture.failedFuture(
                 new IllegalStateException("no UsageSink bean: define one (your outbox) before publishing usage"));
-        return new UsageEngine(policies, counters, ledger, usageSink, clock, props.failMode(), props.concurrencyLease(),
+        return new UsageEngine(policies, counters, ledger.getIfAvailable(() -> DECISIONS_ONLY), usageSink, clock, props.failMode(), props.concurrencyLease(),
                 telemetry.getIfAvailable(() -> UsageTelemetry.NOOP));
     }
 }

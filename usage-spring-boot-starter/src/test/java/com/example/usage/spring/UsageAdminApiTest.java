@@ -336,4 +336,27 @@ class UsageAdminApiTest {
                 (int) JsonPath.read(body(get("/v1/usage/summaries?tenantId=metered&metric=BILLED_DOCS"), 200), "$.items[0].net"));
         body(json(post("/v1/usage/tenants/metered/overrides"), "{\"limitId\":\"" + id(meter) + "\",\"value\":9,\"reason\":\"no\"}"), 400); // nothing to override
     }
+
+    // ---- the policy for the service that decides with the engine ----------------------------------
+
+    @Test @Order(16)
+    void thePolicyOfATenantIsServedUnderItsOwnRoleOnly() throws Exception {
+        body(json(post("/v1/usage/metrics"), "{\"code\":\"EDGE_DOCS\",\"unit\":\"document\"}"), 201);
+        String plan = id(body(json(post("/v1/usage/plans"), "{\"code\":\"EDGE\",\"name\":\"Edge\"}"), 201));
+        body(json(post("/v1/usage/plans/" + plan + "/limits"), "{\"metric\":\"EDGE_DOCS\",\"type\":\"RATE\",\"value\":5,\"windowSeconds\":1}"), 201);
+        body(json(post("/v1/usage/plans/" + plan + "/limits"), "{\"metric\":\"EDGE_DOCS\",\"type\":\"QUOTA\",\"value\":1000,\"windowMonths\":1,\"enforcement\":\"ALLOW_OVERAGE\"}"), 201);
+        body(json(post("/v1/usage/tenants"), "{\"id\":\"edge-t\",\"name\":\"Edge\"}"), 201);
+        body(json(post("/v1/usage/tenants/edge-t/subscriptions"), "{\"planCode\":\"EDGE\",\"planVersion\":1}"), 201);
+
+        String json = mvc.perform(get("/internal/policies/edge-t").with(as("usage:policy-read"))).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        var policy = com.example.usage.client.PolicyJson.parse(json); // what an HttpPolicyStore reads
+        org.junit.jupiter.api.Assertions.assertEquals("EDGE", policy.plan().code());
+        org.junit.jupiter.api.Assertions.assertEquals(2, policy.limitsFor("EDGE_DOCS").size());
+
+        mvc.perform(get("/internal/policies/edge-t").with(as("usage:read", "usage:write"))).andExpect(status().isForbidden()); // the management roles do not open it
+        mvc.perform(get("/v1/usage/tenants").with(as("usage:policy-read"))).andExpect(status().isForbidden()); // and it opens nothing else
+        mvc.perform(get("/internal/policies/nobody").with(as("usage:policy-read"))).andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("POLICY_NOT_FOUND"));
+    }
 }

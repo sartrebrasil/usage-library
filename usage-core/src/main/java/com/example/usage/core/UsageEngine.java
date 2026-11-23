@@ -23,6 +23,8 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.EnumSet;
+import java.util.Set;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -134,11 +136,20 @@ public final class UsageEngine {
      * is undone in the period it was charged to.
      */
     public CompletionStage<Decision> check(TenantId tenant, String metricCode, long cost, Instant at) {
+        return check(tenant, metricCode, cost, at, EnumSet.allOf(Type.class));
+    }
+
+    /**
+     * Same, but only the limits of the given types take part: the rate limit alone, early in a request, and the quota alone, once the
+     * work is known to be accepted. A tenant with no policy is refused whichever types are asked for. Pass the same types, and the same
+     * {@code at}, to {@link #undoCheck(TenantId, String, long, Instant, Set)}.
+     */
+    public CompletionStage<Decision> check(TenantId tenant, String metricCode, long cost, Instant at, Set<Type> only) {
         requirePositive(cost);
         Op op = telemetry.start("check", "metric", metricCode);
         return observed(op, op.inScope(() -> policies.policyFor(tenant)
                 .thenCompose(opt -> opt.isPresent()
-                        ? evaluate(opt.get(), tenant, metricCode, cost, at)
+                        ? evaluate(opt.get(), tenant, metricCode, cost, at, only)
                         : done(Decision.deny(Decision.NO_POLICY)))
                 .exceptionally(this::degraded)), UsageEngine::tagDecision);
     }
@@ -158,9 +169,10 @@ public final class UsageEngine {
         return failMode == FailMode.OPEN ? Decision.allowDegraded(reason) : Decision.deny(reason);
     }
 
-    private CompletionStage<Decision> evaluate(Policy p, TenantId t, String metric, long cost, Instant at) {
+    private CompletionStage<Decision> evaluate(Policy p, TenantId t, String metric, long cost, Instant at, Set<Type> only) {
         // METER measures for the summary and decides nothing
-        List<Limit> limits = p.limitsFor(metric).stream().filter(l -> l.type() != Type.METER).sorted(Comparator.comparing(Limit::type)).toList();
+        List<Limit> limits = p.limitsFor(metric).stream().filter(l -> l.type() != Type.METER && only.contains(l.type()))
+                .sorted(Comparator.comparing(Limit::type)).toList();
         List<Applied> applied = new ArrayList<>();
         return step(limits, 0, p, t, cost, at, applied, false)
                 .thenApply(d -> d.withPlan(p.plan()))
@@ -174,13 +186,18 @@ public final class UsageEngine {
      * {@code at} as the check. Result metrics and concurrency are read-only in {@code check}, so nothing to undo.
      */
     public CompletionStage<Void> undoCheck(TenantId tenant, String metricCode, long cost, Instant at) {
-        requirePositive(cost);
-        return policies.policyFor(tenant).thenCompose(opt -> opt.isEmpty() ? done(null) : undo(opt.get(), tenant, metricCode, cost, at));
+        return undoCheck(tenant, metricCode, cost, at, EnumSet.allOf(Type.class));
     }
 
-    private CompletionStage<Void> undo(Policy p, TenantId t, String metric, long cost, Instant at) {
+    /** Gives back only what a {@link #check(TenantId, String, long, Instant, Set) check} of the same types consumed. */
+    public CompletionStage<Void> undoCheck(TenantId tenant, String metricCode, long cost, Instant at, Set<Type> only) {
+        requirePositive(cost);
+        return policies.policyFor(tenant).thenCompose(opt -> opt.isEmpty() ? done(null) : undo(opt.get(), tenant, metricCode, cost, at, only));
+    }
+
+    private CompletionStage<Void> undo(Policy p, TenantId t, String metric, long cost, Instant at, Set<Type> only) {
         CompletableFuture<?>[] undone = p.limitsFor(metric).stream()
-                .filter(l -> !readOnly(l))
+                .filter(l -> !readOnly(l) && only.contains(l.type()))
                 .map(l -> counters.add(key(t, l, p.anchor(), at), -cost, Long.MAX_VALUE, ttl(l)).toCompletableFuture())
                 .toArray(CompletableFuture[]::new);
         return CompletableFuture.allOf(undone);
@@ -196,21 +213,35 @@ public final class UsageEngine {
             CompletionStage<Long> held = l.type() == Type.CONCURRENCY ? counters.leasesInUse(key) : counters.get(key);
             return held.thenCompose(used -> {
                 boolean over = used >= l.value();
-                if (over && l.enforcement() == Enforcement.REJECT) return denyAfterRollback(applied, cost, l);
+                recordRatio(l, used);
+                if (over && l.enforcement() == Enforcement.REJECT) return denyAfterRollback(applied, cost, l, p, now);
                 return step(ls, i + 1, p, t, cost, now, applied, overage || over);
             });
         }
         long cap = l.enforcement() == Enforcement.REJECT ? l.value() : Long.MAX_VALUE;
         return counters.add(key, cost, cap, ttl(l)).thenCompose(r -> {
-            if (!r.applied()) return denyAfterRollback(applied, cost, l);
+            recordRatio(l, r.value());
+            if (!r.applied()) return denyAfterRollback(applied, cost, l, p, now);
             applied.add(new Applied(key, ttl(l)));
             return step(ls, i + 1, p, t, cost, now, applied, overage || r.value() > l.value());
         });
     }
 
     /** The refusal stands even if giving the counters back fails: a failed undo must never turn a refusal into an allow. */
-    private CompletionStage<Decision> denyAfterRollback(List<Applied> applied, long cost, Limit l) {
-        return undoQuietly(applied, cost).thenApply(v -> Decision.deny(reason(l)));
+    private CompletionStage<Decision> denyAfterRollback(List<Applied> applied, long cost, Limit l, Policy p, Instant at) {
+        return undoQuietly(applied, cost).thenApply(v -> Decision.deny(reason(l)).withRetryAfter(retryAfter(l, p, at)));
+    }
+
+    /** Until the period the refusing counter belongs to ends (rate and quota); nothing for a concurrency slot, which frees when a job ends. */
+    private static Duration retryAfter(Limit l, Policy p, Instant at) {
+        if (l.window() == null) return null;
+        Duration wait = Duration.between(at, PeriodCalculator.periodOf(l.window(), p.anchor(), at).end());
+        return wait.isNegative() ? Duration.ZERO : wait;
+    }
+
+    /** How full a quota is, seen at the moment of a check: the metric that tells how close the tenants that are issuing are to their limit. */
+    private void recordRatio(Limit l, long used) {
+        if (l.type() == Type.QUOTA && l.value() > 0) telemetry.record("quota.ratio", (double) used / l.value(), "metric", l.metric().code());
     }
 
     private CompletionStage<Void> undoQuietly(List<Applied> applied, long cost) {

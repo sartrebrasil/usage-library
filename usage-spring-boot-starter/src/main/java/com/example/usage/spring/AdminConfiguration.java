@@ -12,6 +12,7 @@ import com.example.usage.admin.usage.CompensationAdmin;
 import com.example.usage.admin.usage.UsageQueries;
 import com.example.usage.admin.web.CatalogController;
 import com.example.usage.admin.web.CompensationController;
+import com.example.usage.admin.web.PolicyController;
 import com.example.usage.admin.web.TenantWritesController;
 import com.example.usage.admin.web.TenantsController;
 import com.example.usage.admin.web.UsageController;
@@ -51,7 +52,7 @@ import java.util.function.Supplier;
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 @ConditionalOnBean(DataSource.class)
 @ConditionalOnProperty(name = "usage.admin.enabled", havingValue = "true", matchIfMissing = true)
-@Import({TenantsController.class, CatalogController.class, UsageController.class, CompensationController.class})
+@Import({TenantsController.class, CatalogController.class, UsageController.class, CompensationController.class, PolicyController.class})
 class AdminConfiguration {
 
     /**

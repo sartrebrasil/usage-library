@@ -108,6 +108,8 @@ class UsageGatewayFilterTest {
 
         assertEquals(HttpStatus.TOO_MANY_REQUESTS, ex.getResponse().getStatusCode());
         assertEquals("{\"error\":\"quota_exceeded\"}", ex.getResponse().getBodyAsString().block());
+        long wait = Long.parseLong(ex.getResponse().getHeaders().getFirst("Retry-After")); // until the quota's period ends, so the client knows when to come back
+        assertTrue(wait >= 1, "Retry-After: " + wait);
         assertNull(forwarded.get());
         assertTrue(events.isEmpty());
     }
