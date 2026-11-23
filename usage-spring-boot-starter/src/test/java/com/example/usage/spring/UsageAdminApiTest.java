@@ -207,6 +207,18 @@ class UsageAdminApiTest {
         body(delete("/v1/usage/tenants/acme/overrides/" + id(o)), 204);
     }
 
+    @Test
+    void aCompensationNamesTheEventByTheBusinessItem() throws Exception {
+        engine.ingest(new UsageEvent(UsageEvent.idFor(new TenantId("acme"), "doc-7", "ITEM_METRIC"), new TenantId("acme"), "ITEM_METRIC", 2, Instant.now()))
+                .toCompletableFuture().join();
+        body(json(post("/v1/usage/compensations"), "{\"tenantId\":\"acme\",\"metric\":\"ITEM_METRIC\",\"reason\":\"x\"}"), 400); // no itemId
+        body(json(post("/v1/usage/compensations"), "{\"tenantId\":\"acme\",\"metric\":\"ITEM_METRIC\",\"itemId\":\"nope\",\"reason\":\"x\"}"), 404);
+        String done = body(json(post("/v1/usage/compensations"), "{\"tenantId\":\"acme\",\"metric\":\"ITEM_METRIC\",\"itemId\":\"doc-7\",\"reason\":\"billing error\"}"), 201);
+        org.junit.jupiter.api.Assertions.assertEquals("APPLIED", JsonPath.read(done, "$.result"));
+        org.junit.jupiter.api.Assertions.assertEquals("DUPLICATE", JsonPath.read(
+                body(json(post("/v1/usage/compensations"), "{\"tenantId\":\"acme\",\"metric\":\"ITEM_METRIC\",\"itemId\":\"doc-7\",\"reason\":\"billing error\"}"), 201), "$.result"));
+    }
+
     @Test @Order(7)
     void usageIsSearchableAndACompensationIsAppliedOnce() throws Exception {
         UUID event = UUID.randomUUID();

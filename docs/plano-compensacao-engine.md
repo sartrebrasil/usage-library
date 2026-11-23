@@ -1,6 +1,6 @@
 # Plano: compensação manual no engine (`usage-api`)
 
-> Estado: **M1 (no lifecycle, T-204) e M2 feitos**; falta M3 (decisão: documentar) e M4. Texto original abaixo (o M1 foi para o lifecycle, §9). Antes: **plano; o M2 já está feito** (o `usage-api` usa o starter e tem o `UsageEngine`, T-203) e falta o M1, que alimenta o ledger. Levantado em 2026-11-23, depois dos commits `520d737` (usage-platform) e `91d0ce0` (engine).
+> Estado: **M1 (no lifecycle, T-204) e M2 feitos**; M4 (compensação por item) feito; falta só M3 (decisão: documentar). Texto original abaixo (o M1 foi para o lifecycle, §9). Antes: **plano; o M2 já está feito** (o `usage-api` usa o starter e tem o `UsageEngine`, T-203) e falta o M1, que alimenta o ledger. Levantado em 2026-11-23, depois dos commits `520d737` (usage-platform) e `91d0ce0` (engine).
 > Contexto: [`plano-integracao-engine.md`](plano-integracao-engine.md).
 
 ## 1. Por que a rota não existe hoje no `usage-api`

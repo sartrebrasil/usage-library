@@ -9,6 +9,7 @@ import com.example.usage.core.UsageEngine;
 import com.example.usage.core.UsageEngine.Compensate;
 import com.example.usage.core.model.Compensation;
 import com.example.usage.core.model.TenantId;
+import com.example.usage.core.model.UsageEvent;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -23,8 +24,12 @@ import java.util.UUID;
  * (an access metric's counter only goes up, so it stays high until its period ends).
  */
 public final class CompensationAdmin {
-    /** {@code quantity} defaults to the whole original. */
-    public record Request(UUID originalEventId, Long quantity, String reason) {}
+    /**
+     * The event is named either by {@code originalEventId} or by the business item ({@code tenantId}, {@code metric},
+     * {@code itemId}: the key the host reported it with, so "reverse document X" needs no lookup). {@code quantity}
+     * defaults to the whole original.
+     */
+    public record Request(UUID originalEventId, String tenantId, String metric, String itemId, Long quantity, String reason) {}
 
     public record Result(String result, UUID compensationEventId, UUID originalEventId, String tenantId, String metricCode,
                          long quantity, Instant occurredAt) {}
@@ -41,10 +46,22 @@ public final class CompensationAdmin {
         this.queries = queries;
     }
 
+    private static UUID originalId(Request in) {
+        if (in.originalEventId() != null) return in.originalEventId();
+        if (in.tenantId() == null || in.metric() == null || in.itemId() == null) {
+            throw ApiException.badRequest("FIELD_REQUIRED", "originalEventId or tenantId, metric and itemId are required");
+        }
+        try {
+            return UsageEvent.idFor(new TenantId(in.tenantId()), in.itemId(), in.metric());
+        } catch (IllegalArgumentException e) {
+            throw ApiException.badRequest("INVALID_COMPENSATION", e.getMessage());
+        }
+    }
+
     public Result compensate(Request in) {
-        if (in == null || in.originalEventId() == null) throw ApiException.badRequest("FIELD_REQUIRED", "originalEventId is required");
+        if (in == null) throw ApiException.badRequest("FIELD_REQUIRED", "originalEventId or tenantId, metric and itemId are required");
         String reason = Check.text(in.reason(), "reason", 60); // the ledger column is VARCHAR(60)
-        UsageQueries.Event original = queries.event(in.originalEventId());
+        UsageQueries.Event original = queries.event(originalId(in));
         if (!"USAGE".equals(original.eventType())) throw ApiException.badRequest("NOT_A_USAGE_EVENT", "only a usage event can be compensated");
         long quantity = in.quantity() == null ? original.quantity() : in.quantity();
         if (quantity > original.quantity()) throw ApiException.badRequest("QUANTITY_TOO_LARGE", "quantity is larger than the original " + original.quantity());

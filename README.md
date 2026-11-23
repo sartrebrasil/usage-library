@@ -607,7 +607,7 @@ O ator da auditoria é o `Authentication.getName()` do token. Para tirá-lo de o
 | `GET /tenants/{id}/plans`, `PUT /tenants/{id}/plan` | histórico, **trocar de plano** | troca os limites e mantém ciclo e contadores do período. O `at` é agora ou passado: data futura é recusada (`FUTURE_NOT_SUPPORTED`) |
 | `GET/POST /tenants/{id}/overrides`, `PUT/DELETE .../{overrideId}` | exceção de limite de um tenant | `reason` obrigatório; termina junto com o plano |
 
-**Compensação** (`usage:compensate`): `POST /compensations` com `{originalEventId, quantity?, reason}`. É aplicada **na
+**Compensação** (`usage:compensate`): `POST /compensations` com `{originalEventId, quantity?, reason}`, ou, no lugar do id do evento, o item de negócio com que o uso foi reportado: `{tenantId, metric, itemId, quantity?, reason}` (o id sai de `UsageEvent.idFor`, e dá o mesmo resultado). É aplicada **na
 hora**, pelo `UsageEngine`, sem broker nem outbox: a resposta diz o resultado (`APPLIED`, `DUPLICATE`, `COUNTER_DRIFT`).
 `quantity` padrão é o original inteiro. Repetir o mesmo pedido é inofensivo: devolve o que está gravado (não a quantidade do novo pedido) e completa a auditoria se a primeira tentativa a perdeu. A rota só existe se a aplicação tem um
 `UsageEngine`, e os contadores se movem pelo `CounterStore` do host (com Redis, a cota volta na hora; sem conseguir
