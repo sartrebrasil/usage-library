@@ -82,3 +82,11 @@ Redis no `docker-compose` (e `host.docker.internal:6379` no kind, como Postgres 
 ## 6. Decisões tomadas
 
 1. **Contador:** Redis. 2. **Período:** ciclo da assinatura, âncora no dia 1 UTC. 3. **Sem política:** exige assinatura. 4. **Por segundo:** global, no Redis. 5. **Alerta:** razão uso/limite no `check`.
+
+### Decisões da F1 (2026-11-23)
+
+6. **Nenhum filter nem interceptor.** O `outcome-api` chama a biblioteca de forma explícita, em dois pontos: `admit(tenant)` (cedo, só `RATE`; também recusa o tenant sem assinatura) e `consume(tenant)` (tarde, dentro da transação do documento, só `QUOTA`, devolvendo o `at` do evento de uso e registrando o `undoCheck` se a transação voltar). Um `HandlerInterceptor` só do limite por segundo fica como evolução, a pedido.
+7. **`UsageAdmission` e `UsageDenied` moram no starter** (`spring-tx` já é dependência opcional dele). O `outcome-api` traduz o `UsageDenied` no seu `OutcomeExceptionHandler` (mantém o contrato de erro e o `Retry-After`); a biblioteca traz só um advice opcional.
+8. **`HttpPolicyStore` e `PolicyJson` num módulo novo `usage-client`** (leve: `RestClient` do Spring e Jackson), para o `outcome-api` não puxar o admin; o `HttpPolicyStore` recebe o `RestClient` do host (o `ServiceClient` OAuth do engine).
+9. **A rota de política no `usage-admin`**, `GET /internal/policies/{tenant}`, com a role própria **`usage:policy-read`** (não reaproveita `usage:read`, que abre tudo); `UsageAdminRoutes` ganha a regra.
+
