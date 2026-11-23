@@ -199,18 +199,6 @@ class PostgresTest {
     }
 
     @Test
-    void anInstallationOnV1KeepsDeduplicatingItsOldEventsAfterUpgrading() throws Exception {
-        String schema = "upgrade_check";
-        org.flywaydb.core.Flyway.configure().dataSource(ds).locations("classpath:db/usage").table("usage_schema_history")
-                .schemas(schema).defaultSchema(schema).createSchemas(true).target("1").load().migrate();
-        UUID id = UUID.randomUUID();
-        exec("INSERT INTO " + schema + ".usage_event (event_id, occurred_at, tenant_id, metric_code, quantity) VALUES ('" + id + "', now(), 'old', 'M', 1)");
-        UsageSchema.migrate(ds, schema); // now V2: the backfill must have claimed the id
-        var upgraded = new JdbcLedger(ds, executor, schema);
-        assertFalse(join(upgraded.record(new UsageEvent(id, new TenantId("old"), "M", 1, Instant.parse("2030-01-01T00:00:00Z")), List.of())));
-    }
-
-    @Test
     void engineOverRealPolicyAndLedger() {
         var engine = new UsageEngine(policies, new InMemoryCounterStore(CLOCK), ledger, e -> java.util.concurrent.CompletableFuture.completedFuture(null),
                 CLOCK, FailMode.CLOSED, Duration.ofMinutes(15));

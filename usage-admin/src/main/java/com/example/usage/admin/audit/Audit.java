@@ -29,6 +29,11 @@ public final class Audit {
         this.actor = actor;
     }
 
+    /** The name the trail records for the current caller. */
+    public String actor() {
+        return actor.get();
+    }
+
     /** Call inside the transaction of the change, so either both are recorded or neither. */
     public void record(String action, String entityType, Object entityId, String tenantId, Object before, Object after, String reason) {
         ctx.jdbc().sql(ctx.sql("""

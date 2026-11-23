@@ -13,6 +13,7 @@ import com.example.usage.admin.usage.CompensationAdmin;
 import com.example.usage.admin.usage.UsageQueries;
 import com.example.usage.admin.web.CatalogController;
 import com.example.usage.admin.web.CompensationController;
+import com.example.usage.admin.web.TenantWritesController;
 import com.example.usage.admin.web.TenantsController;
 import com.example.usage.admin.web.UsageController;
 
@@ -108,6 +109,13 @@ public class UsageAdminAutoConfiguration {
 
     @Bean
     UsageQueries usageQueries(AdminContext ctx) { return new UsageQueries(ctx); }
+
+    /** Tenant creation and changes, unless the host owns them: {@code usage.admin.tenants.write=false}. */
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnProperty(name = "usage.admin.tenants.write", havingValue = "true", matchIfMissing = true)
+    @Import(TenantWritesController.class)
+    static class TenantWrites {
+    }
 
     /** Manual compensation needs the platform's engine; without one the endpoint is simply not there. */
     @Configuration(proxyBeanMethods = false)

@@ -171,7 +171,8 @@ class UsageAdminApiTest {
     @Test @Order(3)
     void aTenantSubscribesAndTheEngineReadsThePolicyTheApiWrote() throws Exception {
         body(json(post("/v1/usage/tenants"), "{\"id\":\"Bad Id\",\"name\":\"x\"}"), 400);
-        body(json(post("/v1/usage/tenants"), "{\"id\":\"acme\",\"name\":\"Acme\"}"), 201);
+        String created = body(json(post("/v1/usage/tenants"), "{\"id\":\"acme\",\"name\":\"Acme\"}"), 201);
+        org.junit.jupiter.api.Assertions.assertNotNull(JsonPath.read(created, "$.createdBy")); // who registered it
         body(json(post("/v1/usage/tenants"), "{\"id\":\"acme\",\"name\":\"Acme\"}"), 409);
         body(json(post("/v1/usage/tenants/acme/subscriptions"), "{\"planCode\":\"FREE\",\"planVersion\":1}"), 201);
         body(json(post("/v1/usage/tenants/acme/subscriptions"), "{\"planCode\":\"FREE\",\"planVersion\":1}"), 409);

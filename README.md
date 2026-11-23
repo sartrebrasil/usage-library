@@ -501,6 +501,7 @@ módulo **não autentica**: o host valida o token e o módulo só diz qual role 
 |---|---|---|
 | `usage.admin.enabled` | `true` | `false` desliga a API mesmo com o jar no classpath |
 | `usage.admin.base-path` | `/v1/usage` | Prefixo das rotas. Passe o mesmo valor a `UsageAdminRoutes.apply` |
+| `usage.admin.tenants.write` | `true` | `false` tira `POST`/`PATCH /tenants`: use quando o host é dono da criação de tenants (e só quer listar/consultar aqui). Quando ligado, o tenant criado guarda quem o registrou em `createdBy` |
 | `usage.admin.allow-unsecured` | `false` | A aplicação **não sobe** sem um `SecurityFilterChain` (a API altera cobrança e o módulo não autentica ninguém). `true` só para quando algo na frente da aplicação já autentica, e loga um aviso |
 
 ### Roles
@@ -575,7 +576,7 @@ Aqui a auditoria é gravada logo **depois** do ledger, não na mesma transação
 O mínimo para só gerir e consultar é o `usage-admin` com um `DataSource`. O `UsageEngine` (starter + Redis) só é preciso para a
 compensação manual; sem ele a rota `POST /compensations` simplesmente não existe.
 
-**2. Banco.** O módulo **não roda migrations**. As tabelas (`V1` a `V3`) precisam existir no schema `usage.postgres.schema`
+**2. Banco.** O módulo **não roda migrations**. As tabelas (a migration `V202611190001__usage_core.sql`) precisam existir no schema `usage.postgres.schema`
 (padrão `usage`): com o starter, `usage.postgres.migrate=true`; em um pipeline próprio, `UsageSchema.migrate(dataSource, "usage")`
 ou os arquivos de `usage-postgres/src/main/resources/db/usage/`.
 
@@ -791,13 +792,13 @@ defesas valem. O `eventId` precisa ser determinístico por item; o horário não
 
 ## Banco de dados
 
-Migrations em `usage-postgres/src/main/resources/db/usage/` (`V1__usage_core.sql`, `V2__event_id_gate_and_indexes.sql` e `V3__usage_audit.sql`). **O V1 está congelado** (um teste confere o seu checksum): toda mudança de schema entra como um novo `V<n>`. São 13 tabelas, em três grupos: **catálogo** (o que existe), **contratação** (quem assinou o quê) e **medição** (o que foi consumido).
+Migration em `usage-postgres/src/main/resources/db/usage/`: uma só, `V202611190001__usage_core.sql` (o nome segue o padrão do engine, `V<aaaammdd><nnnn>__descrição.sql`). Com o projeto em desenvolvimento e sem instalação a atualizar, o schema inteiro vive nela e ela se edita no lugar; **quando houver uma instalação real**, congele esse arquivo e ponha cada mudança numa migration nova, com a data e a sequência seguintes. São 13 tabelas, em três grupos: **catálogo** (o que existe), **contratação** (quem assinou o quê) e **medição** (o que foi consumido).
 
 **Catálogo** (cadastrado pelo seu sistema)
 
 | Tabela | O que é | Para que serve |
 |---|---|---|
-| `tenant` | O cliente (empresa/conta) | Dono de tudo; `ACTIVE` ou `SUSPENDED`. O id é texto livre, o que o seu sistema usar |
+| `tenant` | O cliente (empresa/conta) | Dono de tudo; `ACTIVE` ou `SUSPENDED`. O id é texto livre, o que o seu sistema usar. `created_by` guarda quem o registrou, para o host que cria tenants por conta própria |
 | `metric` | O que se mede (`API_REQUESTS`, `ITEMS_PROCESSED`) | Define a unidade e *quando* conta: `ON_REQUEST` (na entrada) ou `ON_FINAL_STATUS` (quando o processamento termina) |
 | `plan` | Um plano versionado (`PRO` v1, `PRO` v2) | Agrupa limites; mudar um plano cria uma versão nova, sem alterar a antiga |
 | `plan_limit` | Uma regra de um plano para uma métrica | Tipo (`RATE`, `QUOTA`, `CONCURRENCY`), valor, janela (segundos ou meses) e o que fazer ao estourar (`REJECT` ou `ALLOW_OVERAGE`). Ex.: "PRO: 1000 requisições por dia" |

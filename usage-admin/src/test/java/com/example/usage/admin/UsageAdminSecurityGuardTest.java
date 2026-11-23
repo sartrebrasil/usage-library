@@ -1,6 +1,7 @@
 package com.example.usage.admin;
 
 import com.example.usage.admin.tenant.TenantAdmin;
+import com.example.usage.admin.web.TenantWritesController;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.WebApplicationContextRunner;
@@ -40,5 +41,12 @@ class UsageAdminSecurityGuardTest {
     @Test
     void itCanBeTurnedOff() {
         runner.withPropertyValues("usage.admin.enabled=false").run(ctx -> assertThat(ctx).hasNotFailed().doesNotHaveBean(TenantAdmin.class));
+    }
+
+    @Test
+    void aHostThatOwnsTenantsCanKeepOnlyTheirListing() {
+        runner.withPropertyValues("usage.admin.allow-unsecured=true").run(ctx -> assertThat(ctx).hasSingleBean(TenantWritesController.class));
+        runner.withPropertyValues("usage.admin.allow-unsecured=true", "usage.admin.tenants.write=false")
+                .run(ctx -> assertThat(ctx).hasNotFailed().doesNotHaveBean(TenantWritesController.class).hasSingleBean(TenantAdmin.class));
     }
 }

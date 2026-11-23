@@ -15,7 +15,7 @@ import java.util.regex.Pattern;
 
 /** Tenants of the platform. Never deleted (history points at them): a tenant is suspended instead. */
 public final class TenantAdmin {
-    public record View(String id, String name, String status, Instant createdAt) {}
+    public record View(String id, String name, String status, String createdBy, Instant createdAt) {}
 
     public record Create(String id, String name) {}
 
@@ -24,7 +24,7 @@ public final class TenantAdmin {
 
     private static final Pattern ID = Pattern.compile("[a-z0-9][a-z0-9-]{1,62}");
     private static final Set<String> STATUSES = Set.of("ACTIVE", "SUSPENDED");
-    private static final String SELECT = "SELECT id, name, status, created_at FROM {tenant}";
+    private static final String SELECT = "SELECT id, name, status, created_by, created_at FROM {tenant}";
 
     private final AdminContext ctx;
     private final Audit audit;
@@ -41,7 +41,8 @@ public final class TenantAdmin {
         String name = Check.text(in.name(), "name", 200);
         return ctx.changingTenant(in.id(), () -> {
             try {
-                ctx.jdbc().sql(ctx.sql("INSERT INTO {tenant} (id, name) VALUES (:id, :name)")).param("id", in.id()).param("name", name).update();
+                ctx.jdbc().sql(ctx.sql("INSERT INTO {tenant} (id, name, created_by) VALUES (:id, :name, :by)"))
+                        .param("id", in.id()).param("name", name).param("by", audit.actor()).update();
             } catch (org.springframework.dao.DuplicateKeyException e) {
                 throw ApiException.conflict("TENANT_EXISTS", "tenant " + in.id() + " already exists");
             }
@@ -67,8 +68,12 @@ public final class TenantAdmin {
     }
 
     public View get(String id) {
-        return ctx.jdbc().sql(ctx.sql(SELECT + " WHERE id = :id")).param("id", id).query(TenantAdmin::view).optional()
-                .orElseThrow(() -> ApiException.notFound("TENANT_NOT_FOUND", "tenant " + id + " does not exist"));
+        return find(id).orElseThrow(() -> ApiException.notFound("TENANT_NOT_FOUND", "tenant " + id + " does not exist"));
+    }
+
+    /** For a host that has its own rules on a missing tenant (it answers in its own error type): empty instead of the 404. */
+    public java.util.Optional<View> find(String id) {
+        return ctx.jdbc().sql(ctx.sql(SELECT + " WHERE id = :id")).param("id", id).query(TenantAdmin::view).optional();
     }
 
     public Page<View> list(String q, String status, Page.Request page) {
@@ -79,6 +84,6 @@ public final class TenantAdmin {
     }
 
     private static View view(ResultSet rs, int row) throws SQLException {
-        return new View(rs.getString("id"), rs.getString("name"), rs.getString("status"), AdminContext.instant(rs, "created_at"));
+        return new View(rs.getString("id"), rs.getString("name"), rs.getString("status"), rs.getString("created_by"), AdminContext.instant(rs, "created_at"));
     }
 }

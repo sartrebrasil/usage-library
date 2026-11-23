@@ -1,11 +1,13 @@
--- Schema of usage-postgres. Tenant ids are TEXT so the host can use any id scheme.
+-- Schema of usage-postgres, in one migration while the project is in development (no installation to upgrade yet): when there is one,
+-- freeze this file and put every change in a new migration. Tenant ids are TEXT so the host can use any id scheme.
 -- Differences from the design doc: window_seconds / window_months instead of window_unit+size; no route_pattern,
--- soft limits or overage price yet (billing phase); usage_summary arrives with the period calculator.
+-- soft limits or overage price yet (billing phase).
 
 CREATE TABLE tenant (
     id          TEXT PRIMARY KEY,
     name        VARCHAR(200) NOT NULL,
     status      VARCHAR(20)  NOT NULL DEFAULT 'ACTIVE',
+    created_by  TEXT,                                   -- who registered it (the caller's name in the token); nullable: a path without a caller has none
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
     CONSTRAINT ck_tenant_status CHECK (status IN ('ACTIVE', 'SUSPENDED'))
 );
@@ -86,8 +88,8 @@ CREATE TABLE tenant_limit_override (
     UNIQUE (tenant_plan_id, plan_limit_id)
 );
 
--- Source of truth of consumption. The key includes occurred_at because the table is partitioned by it,
--- so dedup relies on producers sending a deterministic eventId AND a deterministic occurred_at.
+-- Source of truth of consumption. The key includes occurred_at because the table is partitioned by it, so on its own it only
+-- catches a redelivery that carries the same timestamp: usage_event_id (below) is the dedup by event id alone.
 CREATE TABLE usage_event (
     event_id     UUID        NOT NULL,
     occurred_at  TIMESTAMPTZ NOT NULL,
@@ -154,3 +156,47 @@ CREATE TABLE usage_compensation (
     compensation_event_id  UUID        NOT NULL,
     created_at             TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Dedup by event id alone. usage_event is partitioned by occurred_at, so its primary key (event_id, occurred_at) only
+-- catches a redelivery that carries the same timestamp; a producer that re-stamps the time would be counted twice.
+-- This table is not partitioned, so its key can be the id alone. The ledger inserts here first, in the same
+-- transaction as the event, and treats a conflict as a duplicate. Purge it with JdbcRetention.
+CREATE TABLE usage_event_id (
+    event_id     UUID        PRIMARY KEY,
+    recorded_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX ix_usage_event_id_recorded ON usage_event_id (recorded_at);
+
+-- the policy query asks for the subscription in force at an instant, so it needs (tenant, started_at); the partial
+-- unique index on open subscriptions cannot serve "ended_at IS NULL OR ended_at > ?".
+CREATE INDEX ix_tenant_subscription_tenant ON tenant_subscription (tenant_id, started_at DESC);
+
+-- retention of the slots goes by the end of their period
+CREATE INDEX ix_usage_event_slot_period_end ON usage_event_slot (period_end);
+
+-- Who changed what, and when: written by usage-admin in the same transaction as every change it makes.
+-- Append-only: the trigger below refuses UPDATE and DELETE, so the trail cannot be edited through SQL by accident.
+CREATE TABLE usage_audit (
+    id            UUID        PRIMARY KEY,
+    occurred_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    actor         TEXT        NOT NULL,          -- the caller's name in the token (client id or user)
+    action        VARCHAR(40) NOT NULL,          -- CREATE, UPDATE, DELETE, CHANGE_PLAN, SUBSCRIBE, END_SUBSCRIPTION, COMPENSATE...
+    entity_type   VARCHAR(40) NOT NULL,          -- tenant, metric, plan, plan_limit, subscription, tenant_plan, override, compensation
+    entity_id     TEXT        NOT NULL,
+    tenant_id     TEXT,                          -- set when the change concerns one tenant
+    before_state  JSONB,
+    after_state   JSONB,
+    reason        VARCHAR(300)
+);
+CREATE INDEX ix_usage_audit_entity ON usage_audit (entity_type, entity_id, occurred_at DESC);
+CREATE INDEX ix_usage_audit_tenant ON usage_audit (tenant_id, occurred_at DESC) WHERE tenant_id IS NOT NULL;
+CREATE INDEX ix_usage_audit_time ON usage_audit (occurred_at DESC);
+
+CREATE FUNCTION usage_audit_immutable() RETURNS trigger AS $$
+BEGIN
+    RAISE EXCEPTION 'usage_audit is append-only';
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER usage_audit_no_change BEFORE UPDATE OR DELETE ON usage_audit
+    FOR EACH ROW EXECUTE FUNCTION usage_audit_immutable();

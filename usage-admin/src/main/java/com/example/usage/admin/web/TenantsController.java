@@ -31,20 +31,9 @@ public class TenantsController {
         return tenants.list(q, status, new Page.Request(page, size));
     }
 
-    @PostMapping
-    @ResponseStatus(HttpStatus.CREATED)
-    TenantAdmin.View create(@RequestBody TenantAdmin.Create body) {
-        return tenants.create(body);
-    }
-
     @GetMapping("/{id}")
     TenantAdmin.View get(@PathVariable String id) {
         return tenants.get(id);
-    }
-
-    @PatchMapping("/{id}")
-    TenantAdmin.View update(@PathVariable String id, @RequestBody TenantAdmin.Update body) {
-        return tenants.update(id, body);
     }
 
     // ---- subscription and plan ---------------------------------------------------------------
