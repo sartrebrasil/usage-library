@@ -251,6 +251,21 @@ public final class UsageEngine {
         return CompletableFuture.allOf(undo).handle((v, ex) -> (Void) null);
     }
 
+    /**
+     * What a tenant has used so far of the limit of the given type on the metric, in the period that contains {@code at}: the largest total
+     * among the limits of that type (a tenant with a daily and a monthly quota reports the fuller one). 0 when there is none or no policy.
+     * It reads the counters, so it is as exact as they are.
+     */
+    public CompletionStage<Long> usageOf(TenantId tenant, String metricCode, Type type, Instant at) {
+        return policies.policyFor(tenant).thenCompose(opt -> {
+            if (opt.isEmpty()) return done(0L);
+            Policy p = opt.get();
+            CompletableFuture<Long>[] reads = p.limitsFor(metricCode).stream().filter(l -> l.type() == type)
+                    .map(l -> counters.get(key(tenant, l, p.anchor(), at)).toCompletableFuture()).toArray(CompletableFuture[]::new);
+            return CompletableFuture.allOf(reads).thenApply(v -> java.util.Arrays.stream(reads).mapToLong(CompletableFuture::join).max().orElse(0L));
+        });
+    }
+
     // ---- concurrency -------------------------------------------------------------------------
 
     public CompletionStage<Permit> acquire(TenantId tenant, String metricCode, long cost) {

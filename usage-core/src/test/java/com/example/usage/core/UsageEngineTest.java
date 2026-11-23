@@ -287,6 +287,17 @@ class UsageEngineTest {
     }
 
     @Test
+    void usageOfReadsHowMuchOfTheQuotaIsUsed() {
+        var e = engine(quota(API, 10, DAY, Enforcement.REJECT), new Limit(API, Type.QUOTA, 100, Window.months(1), Enforcement.REJECT));
+        assertEquals(0, join(e.usageOf(T, "API_REQUESTS", Type.QUOTA, clock.instant())));
+        join(e.check(T, "API_REQUESTS", 3));
+        join(e.check(T, "API_REQUESTS", 2));
+        assertEquals(5, join(e.usageOf(T, "API_REQUESTS", Type.QUOTA, clock.instant())));
+        assertEquals(0, join(e.usageOf(T, "API_REQUESTS", Type.CONCURRENCY, clock.instant())), "no limit of that type");
+        assertEquals(0, join(e.usageOf(new TenantId("other"), "UNKNOWN", Type.QUOTA, clock.instant())));
+    }
+
+    @Test
     void noPolicyRefusesWhateverTypesAreAsked() {
         PolicyStore none = t -> done(Optional.empty());
         var e = new UsageEngine(none, counters, ledger, x -> done(null), clock, FailMode.OPEN, Duration.ofMinutes(15));
