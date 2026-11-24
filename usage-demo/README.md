@@ -6,14 +6,14 @@ tenants, limite de taxa, cota diária, cobrança por lote e devolução de cota 
 ## Rodar
 
 ```bash
-cd usage-platform
+cd usage-library
 mvn -DskipTests install            # instala os módulos (e as suas duas bibliotecas locais, antes: veja o README raiz)
 cd usage-demo
 docker compose up -d               # PostgreSQL e Redis
 mvn spring-boot:run
 ```
 
-Na subida a aplicação cria as tabelas no schema `usage` (`usage.postgres.migrate=true`) e semeia o catálogo
+Na subida a aplicação cria as tabelas no schema `usage` (`usage.postgres.enabled=true` e `usage.postgres.migrate=true`) e semeia o catálogo
 ([DemoData](src/main/java/com/example/usage/demo/DemoData.java)):
 
 | Tenant | Chave (`X-Api-Key`) | Plano | Limites de `API_REQUESTS` |

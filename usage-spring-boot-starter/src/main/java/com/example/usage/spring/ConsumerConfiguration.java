@@ -15,7 +15,7 @@ import java.util.Set;
 import java.util.function.Consumer;
 
 @Configuration(proxyBeanMethods = false)
-@ConditionalOnClass(UsageEventConsumer.class)
+@ConditionalOnClass(tools.jackson.databind.json.JsonMapper.class) // jackson is optional in usage-core
 @ConditionalOnProperty(name = "usage.consumer.enabled", havingValue = "true")
 class ConsumerConfiguration {
 

@@ -20,7 +20,7 @@ import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
 import org.postgresql.ds.PGSimpleDataSource;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
-import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.boot.test.context.runner.ReactiveWebApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
@@ -120,14 +120,14 @@ class StarterBrokerTest {
         declareQueues();
         Flyway.configure().dataSource(dataSource()).locations("classpath:db/outbox/postgresql").table("outbox_schema_history").load().migrate();
 
-        new ApplicationContextRunner()
+        new ReactiveWebApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(UsageAutoConfiguration.class,
                         com.example.outbox.spring.OutboxAutoConfiguration.class,
                         com.example.messaging.spring.MessagingAutoConfiguration.class,
                         com.example.messaging.inbox.spring.InboxAutoConfiguration.class))
                 .withUserConfiguration(HostBeans.class)
                 .withPropertyValues(
-                        "usage.counters.type=memory", "usage.postgres.migrate=true",
+                        "usage.counters.type=memory", "usage.postgres.enabled=true", "usage.postgres.migrate=true",
                         "usage.consumer.enabled=true", "usage.consumer.known-metrics=API_REQUESTS",
                         "usage.messaging.outbox.destination=usage-events",
                         "usage.messaging.inbox.enabled=true", "usage.messaging.inbox.original-not-found-delay=1s",
@@ -175,7 +175,7 @@ class StarterBrokerTest {
 
     // ---- configuration mistakes fail at startup, with the property to fix ------------------------------------
 
-    static final ApplicationContextRunner LIGHT = new ApplicationContextRunner()
+    static final ReactiveWebApplicationContextRunner LIGHT = new ReactiveWebApplicationContextRunner()
             .withConfiguration(AutoConfigurations.of(UsageAutoConfiguration.class))
             .withUserConfiguration(UsageAutoConfigurationTest.HostStores.class)
             .withPropertyValues("usage.counters.type=memory");
@@ -193,7 +193,7 @@ class StarterBrokerTest {
         };
     }
 
-    static final org.springframework.boot.test.context.runner.ApplicationContextRunner GATEWAY_APP = LIGHT
+    static final org.springframework.boot.test.context.runner.ReactiveWebApplicationContextRunner GATEWAY_APP = LIGHT
             .withBean(OutboxWriter.class, StarterBrokerTest::stubWriter)
             .withBean(com.example.usage.core.spi.TenantResolver.class, () -> (com.example.usage.core.spi.TenantResolver<org.springframework.web.server.ServerWebExchange>)
                     ex -> java.util.concurrent.CompletableFuture.completedFuture(java.util.Optional.of(new TenantId("acme"))))
@@ -232,21 +232,18 @@ class StarterBrokerTest {
     @Test
     void aPropertyThatNeedsAMissingJarFailsTheStartupInsteadOfBeingIgnored() {
         var hostBeans = LIGHT.withUserConfiguration(UsageAutoConfigurationTest.HostTenants.class);
-        hostBeans.withClassLoader(new org.springframework.boot.test.context.FilteredClassLoader(com.example.usage.gateway.UsageGatewayFilter.class))
+        hostBeans.withClassLoader(new org.springframework.boot.test.context.FilteredClassLoader(org.springframework.cloud.gateway.filter.GlobalFilter.class))
                 .withPropertyValues("usage.gateway.enabled=true", "usage.gateway.metrics[0].code=API_REQUESTS")
-                .run(ctx -> assertThat(ctx).hasFailed().getFailure().hasStackTraceContaining("usage-gateway jar"));
-        hostBeans.withClassLoader(new org.springframework.boot.test.context.FilteredClassLoader(com.example.usage.consumer.UsageEventConsumer.class))
+                .run(ctx -> assertThat(ctx).hasFailed().getFailure().hasStackTraceContaining("spring-cloud-starter-gateway-server-webflux jar"));
+        hostBeans.withClassLoader(new org.springframework.boot.test.context.FilteredClassLoader(tools.jackson.databind.json.JsonMapper.class))
                 .withPropertyValues("usage.consumer.enabled=true", "usage.consumer.known-metrics=API_REQUESTS")
-                .run(ctx -> assertThat(ctx).hasFailed().getFailure().hasStackTraceContaining("usage-consumer jar"));
-        hostBeans.withClassLoader(new org.springframework.boot.test.context.FilteredClassLoader(com.example.usage.processor.QueueUsageAdapter.class))
-                .withPropertyValues("usage.processor.metric=ITEMS_PROCESSED", "usage.processor.countable-statuses=COMPLETED")
-                .run(ctx -> assertThat(ctx).hasFailed().getFailure().hasStackTraceContaining("usage-processor jar"));
-        hostBeans.withClassLoader(new org.springframework.boot.test.context.FilteredClassLoader(OutboxUsageSink.class))
+                .run(ctx -> assertThat(ctx).hasFailed().getFailure().hasStackTraceContaining("jackson-databind jar"));
+        hostBeans.withClassLoader(new org.springframework.boot.test.context.FilteredClassLoader(com.example.outbox.core.OutboxWriter.class))
                 .withPropertyValues("usage.messaging.outbox.destination=usage-events")
-                .run(ctx -> assertThat(ctx).hasFailed().getFailure().hasStackTraceContaining("usage-messaging jar"));
-        hostBeans.withClassLoader(new org.springframework.boot.test.context.FilteredClassLoader(UsageInboxHandler.class))
+                .run(ctx -> assertThat(ctx).hasFailed().getFailure().hasStackTraceContaining("outbox-core jar"));
+        hostBeans.withClassLoader(new org.springframework.boot.test.context.FilteredClassLoader(com.example.messaging.inbox.InboxResultHandler.class))
                 .withPropertyValues("usage.messaging.inbox.enabled=true")
-                .run(ctx -> assertThat(ctx).hasFailed().getFailure().hasStackTraceContaining("usage-messaging jar"));
+                .run(ctx -> assertThat(ctx).hasFailed().getFailure().hasStackTraceContaining("messaging-inbox jar"));
     }
 
     @Test

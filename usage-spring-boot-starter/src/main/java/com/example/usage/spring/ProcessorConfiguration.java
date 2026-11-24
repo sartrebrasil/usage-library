@@ -3,7 +3,6 @@ package com.example.usage.spring;
 import com.example.usage.core.UsageEngine;
 import com.example.usage.processor.QueueUsageAdapter;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -16,7 +15,6 @@ import java.util.concurrent.ExecutorService;
 import static com.example.usage.spring.UsageAutoConfiguration.EXECUTOR;
 
 @Configuration(proxyBeanMethods = false)
-@ConditionalOnClass(QueueUsageAdapter.class)
 @ConditionalOnProperty(name = "usage.processor.metric")
 class ProcessorConfiguration {
 

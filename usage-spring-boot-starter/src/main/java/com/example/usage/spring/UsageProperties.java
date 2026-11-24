@@ -20,6 +20,7 @@ public record UsageProperties(
         @DefaultValue Redis redis,
         @DefaultValue Postgres postgres,
         @DefaultValue Gateway gateway,
+        @DefaultValue Servlet servlet,
         @DefaultValue Processor processor,
         @DefaultValue Consumer consumer,
         @DefaultValue Maintenance maintenance,
@@ -122,12 +123,14 @@ public record UsageProperties(
 
     /**
      * @param migrate true runs the platform's own Flyway migrations at startup (history table inside the schema below).
+     * @param enabled true to keep the ledger, policies, summaries and subscriptions in the application's {@code DataSource}. Off by default:
+     *                having Flyway or a DataSource on the classpath is no reason to take over a database the platform was not pointed at.
      * @param schema  the schema that holds the platform's tables, created by the migration. Its own schema (default
      *                "usage") keeps the generic table names (tenant, metric, plan...) from colliding with yours and lets
      *                the migration run beside a schema that already has tables. A lowercase identifier; leave it empty
      *                to use the connection's default schema instead (the tables then resolve through the search_path).
      */
-    public record Postgres(@DefaultValue("false") boolean migrate, @DefaultValue("usage") String schema) {}
+    public record Postgres(@DefaultValue("false") boolean enabled, @DefaultValue("false") boolean migrate, @DefaultValue("usage") String schema) {}
 
     /**
      * @param refundFromStatus responses with this status or above are refunded; 600 turns refunds off.
@@ -135,6 +138,23 @@ public record UsageProperties(
     public record Gateway(@DefaultValue("false") boolean enabled, @DefaultValue("500") int refundFromStatus, List<GatewayMetric> metrics) {
         public Gateway {
             if (refundFromStatus < 100) throw new IllegalArgumentException("usage.gateway.refund-from-status must be an HTTP status (100 or more)");
+            metrics = metrics == null ? List.of() : List.copyOf(metrics);
+        }
+    }
+
+    /**
+     * The Spring MVC interceptor: the metrics of each route (a Spring path pattern, e.g. {@code /orders/**}), checked on the requests that match it.
+     * @param refundFromStatus responses with this status or above are refunded; 600 turns refunds off.
+     */
+    public record Servlet(@DefaultValue("false") boolean enabled, @DefaultValue("500") int refundFromStatus, List<ServletRoute> routes) {
+        public Servlet {
+            if (refundFromStatus < 100) throw new IllegalArgumentException("usage.servlet.refund-from-status must be an HTTP status (100 or more)");
+            routes = routes == null ? List.of() : List.copyOf(routes);
+        }
+    }
+
+    public record ServletRoute(String path, List<GatewayMetric> metrics) {
+        public ServletRoute {
             metrics = metrics == null ? List.of() : List.copyOf(metrics);
         }
     }

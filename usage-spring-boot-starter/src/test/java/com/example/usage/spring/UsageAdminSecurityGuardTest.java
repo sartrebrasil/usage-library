@@ -18,7 +18,7 @@ class UsageAdminSecurityGuardTest {
     final WebApplicationContextRunner runner = new WebApplicationContextRunner()
             .withConfiguration(AutoConfigurations.of(UsageAutoConfiguration.class))
             .withBean(DataSource.class, () -> mock(DataSource.class))
-            .withPropertyValues("usage.counters.type=memory");
+            .withPropertyValues("usage.counters.type=memory", "usage.postgres.enabled=true");
 
     @Test
     void withoutASecurityChainTheApplicationDoesNotStart() {

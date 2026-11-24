@@ -6,7 +6,7 @@
 
   <parent>
     <groupId>com.example.usage</groupId>
-    <artifactId>usage-platform</artifactId>
+    <artifactId>usage-library</artifactId>
     <version>0.1.0-SNAPSHOT</version>
   </parent>
 
@@ -21,40 +21,37 @@
     </dependency>
 
     <!-- Each adapter is optional: the application gets the pieces whose jar it adds. -->
+    <!-- the gateway filter (usage.gateway.*): present only when the application is a Spring Cloud Gateway -->
     <dependency>
-      <groupId>com.example.usage</groupId>
-      <artifactId>usage-gateway</artifactId>
-      <optional>true</optional>
-    </dependency>
-    <dependency>
-      <groupId>com.example.usage</groupId>
-      <artifactId>usage-processor</artifactId>
-      <optional>true</optional>
-    </dependency>
-    <dependency>
-      <groupId>com.example.usage</groupId>
-      <artifactId>usage-consumer</artifactId>
-      <optional>true</optional>
-    </dependency>
-    <dependency>
-      <groupId>com.example.usage</groupId>
-      <artifactId>usage-redis</artifactId>
-      <optional>true</optional>
-    </dependency>
-    <dependency>
-      <groupId>com.example.usage</groupId>
-      <artifactId>usage-postgres</artifactId>
+      <groupId>org.springframework.cloud</groupId>
+      <artifactId>spring-cloud-starter-gateway-server-webflux</artifactId>
       <optional>true</optional>
     </dependency>
 
-    <dependency>
-      <groupId>com.example.usage</groupId>
-      <artifactId>usage-messaging</artifactId>
-      <optional>true</optional>
-    </dependency>
+    <!-- the libraries behind the adapters that live in usage-core (optional there, so optional here) and the broker integration -->
+    <dependency><groupId>tools.jackson.core</groupId><artifactId>jackson-databind</artifactId><optional>true</optional></dependency>
+    <dependency><groupId>org.springframework</groupId><artifactId>spring-web</artifactId><optional>true</optional></dependency>
+    <dependency><groupId>io.lettuce</groupId><artifactId>lettuce-core</artifactId><optional>true</optional></dependency>
+    <dependency><groupId>org.flywaydb</groupId><artifactId>flyway-core</artifactId><optional>true</optional></dependency>
+    <dependency><groupId>org.flywaydb</groupId><artifactId>flyway-database-postgresql</artifactId><optional>true</optional></dependency>
+    <dependency><groupId>org.postgresql</groupId><artifactId>postgresql</artifactId><optional>true</optional></dependency>
+    <!-- the two libraries are yours: install them locally first (mvn install in each) -->
+    <dependency><groupId>com.example.messaging</groupId><artifactId>messaging-inbox</artifactId><optional>true</optional></dependency>
+    <dependency><groupId>com.example.outbox</groupId><artifactId>outbox-core</artifactId><optional>true</optional></dependency>
     <dependency>
       <groupId>com.example.usage</groupId>
       <artifactId>usage-admin</artifactId>
+      <optional>true</optional>
+    </dependency>
+    <!-- the Spring MVC interceptor (usage.servlet.*): present only in a servlet application -->
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-webmvc</artifactId>
+      <optional>true</optional>
+    </dependency>
+    <dependency>
+      <groupId>jakarta.servlet</groupId>
+      <artifactId>jakarta.servlet-api</artifactId>
       <optional>true</optional>
     </dependency>
     <dependency>
@@ -90,6 +87,11 @@
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.projectreactor</groupId>
+      <artifactId>reactor-test</artifactId>
       <scope>test</scope>
     </dependency>
     <!-- the test that wires the real messaging and outbox starters over RabbitMQ -->

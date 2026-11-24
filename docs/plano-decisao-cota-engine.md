@@ -1,5 +1,7 @@
 # Plano: a decisão da cota do engine passa para a biblioteca (sai o `Quotas`)
 
+> **Nota (2026-11-24):** os módulos `usage-processor`, `usage-consumer`, `usage-client`, `usage-redis` e `usage-postgres` viraram pacotes do `usage-core`, e `usage-gateway` e `usage-messaging` viraram pacotes do `usage-spring-boot-starter` (nomes de pacote inalterados). Onde este plano cita esses módulos, leia como esses pacotes; as bibliotecas de terceiros continuam a ser declaradas pela aplicação (veja o README, "Módulos").
+
 > Estado: **plano, nada foi alterado.** Pedido do usuário (2026-11-23): remover do código do engine os detalhes de planos e de uso, para a plataforma ser adotada de fato.
 > Retoma a "rota B" do [`plano-integracao-engine.md`](plano-integracao-engine.md). **Decisões do usuário (2026-11-23): Redis como contador; ciclo da assinatura com âncora no dia 1 UTC; sem assinatura não emite; limite por segundo global no Redis; alerta pela razão uso/limite no `check`.** O desenho abaixo é o dessas decisões (a versão anterior deste plano, com contador em JDBC, foi descartada).
 
@@ -74,7 +76,7 @@ Redis no `docker-compose` (e `host.docker.internal:6379` no kind, como Postgres 
 
 | Fase | Entrega | Pronto quando |
 |---|---|---|
-| F1 | Biblioteca L1 a L7, com testes (Redis real: a corrida pelo último item dá exatamente um `429`; `undoCheck` e o rollback devolvem a cota; o reconciliador conserta um Redis zerado; stale-if-error; `Retry-After`) | `mvn test` do usage-platform verde |
+| F1 | Biblioteca L1 a L7, com testes (Redis real: a corrida pelo último item dá exatamente um `429`; `undoCheck` e o rollback devolvem a cota; o reconciliador conserta um Redis zerado; stale-if-error; `Retry-After`) | `mvn test` do usage-library verde |
 | F2 | usage-api: a rota de política e a role, `counters=redis`, manutenção ligada, `DOCUMENTS` nas métricas conhecidas; saem o plano e a projeção | `UsageApiTest` verde |
 | F3 | outcome-api: o adaptador, o evento `DOCUMENTS`, as migrations (some `tenant_usage`), a troca nos dois pontos; os testes de cota do `OutcomeApiTest` reescritos com **os mesmos cenários** (reenvio não conta, recusa não deixa rascunho nem evento, corrida, excedente, política fora com e sem plano lido, **sem assinatura 403**) | `OutcomeApiTest` verde |
 | F4 | Infra e ops: Redis, variáveis, Keycloak, alertas e painéis, docs; demo e carga | demo no kind verde e `load-tests` sem regressão relevante de p99 |

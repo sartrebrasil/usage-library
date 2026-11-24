@@ -1,4 +1,4 @@
-# usage-platform
+# usage-library
 
 > Nome e coordenadas Maven (`com.example.usage`) são provisórios.
 
@@ -96,20 +96,15 @@ Duas coisas que o billing precisa saber antes de ler a tabela:
 
 ## Módulos
 
+Cinco módulos: `usage-core`, `usage-spring-boot-starter`, `usage-admin`, `usage-demo` e `usage-bom`. Os adaptadores (Redis, PostgreSQL, processador, consumidor, cliente de política) são pacotes do `usage-core`; o filtro do gateway, o interceptor MVC e a integração com broker são pacotes do starter. Cada um só liga com a sua biblioteca de terceiros no classpath (todas `optional`).
+
 | Módulo | Papel | Depende de |
 |---|---|---|
-| `usage-core` | Motor (`UsageEngine`), modelo, SPIs, `PeriodCalculator`, reconciliação, manutenção. **Sem Spring, sem broker, sem gateway.** | só o JDK |
-| `usage-redis` | `CounterStore` em Redis (um script Lua por operação, Lettuce) | core |
-| `usage-postgres` | `Ledger`, `PolicyStore`, `SummaryStore`, `JobLock`, assinaturas, schema Flyway | core |
-| `usage-gateway` | `UsageGatewayFilter` para Spring Cloud Gateway (WebFlux) | core |
-| `usage-processor` | `QueueUsageAdapter` para consumidores de fila (sem cliente de broker) | core |
-| `usage-consumer` | Contrato JSON dos eventos e `UsageEventConsumer` central | core |
-| `usage-messaging` | Liga a plataforma a um broker pela **sua** `messaging-library` (inbox) e `outbox-library`: um handler da inbox e um `UsageSink` sobre o outbox. Não tem código de broker | core, consumer, `messaging-inbox`, `outbox-core` |
+| `usage-core` | Motor (`UsageEngine`), modelo, SPIs, reconciliação, manutenção **e os adaptadores sem Spring**: `…redis` (`CounterStore`, Lettuce), `…postgres` (`Ledger`, `PolicyStore`, `SummaryStore`, `JobLock`, assinaturas, schema Flyway), `…processor` (`QueueUsageAdapter`), `…consumer` (contrato JSON e `UsageEventConsumer`), `…client` (`HttpPolicyStore`, `PolicyJson`). **Sem broker, sem gateway.** As bibliotecas de terceiros (lettuce, flyway + driver, jackson, spring-web) são `optional`: adicione as do adaptador que usar | o JDK |
 | `usage-bom` | Só as versões de todos os módulos, para importar (sem pai, sem o BOM do Boot) | — |
 | `usage-demo` | Aplicação Spring Cloud Gateway pronta para rodar, com docker-compose; veja [usage-demo/README.md](usage-demo/README.md) | o starter e os adaptadores |
-| `usage-client` | Um `PolicyStore` que lê a política do tenant da API do usage (`HttpPolicyStore`, sobre o `RestClient` do host) e o contrato JSON da política (`PolicyJson`). Para um serviço que decide com o motor sem guardar planos | core |
-| `usage-admin` | API de gestão (Spring MVC): manutenção, listagem e pesquisa, auditoria e compensação manual. Biblioteca simples: quem a liga é o starter (`usage.admin.*`). Veja "API de gestão" | core, postgres |
-| `usage-spring-boot-starter` | Auto-configuração a partir de propriedades `usage.*` | os acima (opcionais) |
+| `usage-admin` | API de gestão (Spring MVC): manutenção, listagem e pesquisa, auditoria e compensação manual. Biblioteca simples: quem a liga é o starter (`usage.admin.*`). Veja "API de gestão" | core |
+| `usage-spring-boot-starter` | Auto-configuração a partir de propriedades `usage.*` | core, admin (opcional) e, todos opcionais, o filtro do Spring Cloud Gateway (`com.example.usage.gateway`, WebFlux, `usage.gateway.*`), o interceptor Spring MVC (`com.example.usage.servlet`, `usage.servlet.*`) e a integração com broker (`com.example.usage.messaging`: handler da inbox e `UsageSink` sobre o outbox, via `messaging-inbox` e `outbox-core`, opcionais) |
 
 As SPIs do core (`PolicyStore`, `CounterStore`, `Ledger`, `SummaryStore`, `UsageSink`, `TenantResolver`,
 `JobLock`) são o ponto de extensão: troque Redis ou Postgres implementando a interface.
@@ -138,14 +133,16 @@ Dependências:
 
 ```xml
 <dependency><groupId>com.example.usage</groupId><artifactId>usage-spring-boot-starter</artifactId></dependency>
-<dependency><groupId>com.example.usage</groupId><artifactId>usage-gateway</artifactId></dependency>
-<dependency><groupId>com.example.usage</groupId><artifactId>usage-redis</artifactId></dependency>
-<dependency><groupId>com.example.usage</groupId><artifactId>usage-postgres</artifactId></dependency>
+<dependency><groupId>org.springframework.cloud</groupId><artifactId>spring-cloud-starter-gateway-server-webflux</artifactId></dependency>
+<dependency><groupId>io.lettuce</groupId><artifactId>lettuce-core</artifactId></dependency>
+<dependency><groupId>org.flywaydb</groupId><artifactId>flyway-core</artifactId></dependency>
+<dependency><groupId>org.flywaydb</groupId><artifactId>flyway-database-postgresql</artifactId></dependency>
+<dependency><groupId>org.postgresql</groupId><artifactId>postgresql</artifactId></dependency>
 ```
 
-Cada capacidade pede o seu jar. Além dos quatro acima: `usage-processor` para consumidores de fila, `usage-consumer` para o
-consumidor central, e `usage-messaging` para ligar a um broker (ele já traz o `usage-consumer`). Ligar a propriedade sem o
-jar **falha o startup** dizendo qual falta (veja "Propriedades").
+Os adaptadores de Redis, PostgreSQL, processador, consumidor e cliente vêm no `usage-core`; cada um pede a sua biblioteca
+(lettuce, flyway + driver, `jackson-databind` para o consumidor e o cliente, `spring-web` para o cliente) e para a mensageria
+`messaging-inbox` e `outbox-core`. Ligar a propriedade sem a biblioteca **falha o startup** dizendo qual falta (veja "Propriedades").
 
 `application.yml`:
 
@@ -242,7 +239,7 @@ usage:
 ## Ligando a um broker (messaging-library e outbox-library)
 
 A plataforma não fala com Kafka, SQS, JMS ou RabbitMQ: ela fala com a `messaging-library` (consumo) e a `outbox-library`
-(publicação), e o provedor é o que estiver em `messaging.*`. O módulo `usage-messaging` é a cola, em duas classes:
+(publicação), e o provedor é o que estiver em `messaging.*`. O pacote `com.example.usage.messaging` do starter é a cola, em duas classes:
 
 **Consumo: `UsageInboxHandler`**, um `InboxResultHandler` que chama o `UsageEventConsumer`:
 
@@ -309,7 +306,7 @@ aplicação tem mais de um `DataSource`, aponte os três para o mesmo (`@Primary
 **Envelope da inbox.** O receiver `usage-events` precisa de `envelope: auto` ou `outbox`. Com `raw` ou `cloudevents` o
 handler não encontra o payload da plataforma e manda **toda** mensagem para a DLQ (`invalid_event_id`).
 
-**Pelo starter, só com propriedades.** Com `usage-messaging` no classpath, duas propriedades fazem o resto:
+**Pelo starter, só com propriedades.** Com `messaging-inbox` / `outbox-core` no classpath, duas propriedades fazem o resto:
 
 ```yaml
 usage:
@@ -355,12 +352,13 @@ Todas vivem sob `usage.` (classe `UsageProperties`, com autocomplete na IDE). Du
 | `usage.counters.type` | `redis` \| `memory` | `redis` | Onde ficam os contadores de decisão. `memory` conta dentro de uma JVM: serve para testes e uma instância só, nunca para cluster (loga WARN na subida) |
 | `usage.redis.uri` | URI | — | **Obrigatória** com `counters.type=redis`, a menos que exista um bean `CounterStore` ou `RedisClient` seu. Ex.: `redis://host:6379`, `rediss://...` para TLS |
 | `usage.redis.command-timeout` | duração `> 0` | `500ms` | Um comando mais lento que isso falha e o `fail-mode` decide. Com o Redis desconectado, os comandos falham na hora em vez de enfileirar. Ignorada se você declara o seu `RedisClient` |
+| `usage.postgres.enabled` | boolean | `false` | `true` guarda ledger, políticas, resumos e assinaturas no `DataSource` da aplicação. Desligado por padrão: ter o Flyway ou um `DataSource` no classpath não basta para o usage assumir um banco. Sem isso o starter só decide (sem ledger) |
 | `usage.postgres.migrate` | boolean | `false` | `true` roda as migrations Flyway da plataforma na subida (histórico em `<schema>.usage_schema_history`). Em produção, deixe `false` se o seu pipeline já migra |
 | `usage.postgres.schema` | identificador `[a-z_][a-z0-9_]*` | `usage` | Schema das tabelas da plataforma, criado pela migration. Vazio usa o schema padrão da conexão (então o Flyway recusa um banco que já tem tabelas sem histórico). Mudar depois de ter dados **não** move as tabelas |
 
 O `DataSource` é o do Spring (`spring.datasource.*`). Se houver mais de um, marque o da plataforma como `@Primary`.
 
-### Gateway (precisa do jar `usage-gateway`)
+### Gateway (aplicação Spring Cloud Gateway: reativa, com `spring-cloud-starter-gateway-server-webflux`)
 
 | Propriedade | Tipo | Padrão | Descrição |
 |---|---|---|---|
@@ -372,7 +370,34 @@ O `DataSource` é o do Spring (`spring.datasource.*`). Se houver mais de um, mar
 
 As métricas são checadas na ordem dos *guards* primeiro; se uma recusa, o que as de acesso anteriores consumiram é devolvido.
 
-### Processador (precisa do jar `usage-processor`)
+### Interceptor Spring MVC (serviço de entrada servlet)
+
+O equivalente bloqueante do filtro do gateway, para um serviço MVC que mede por rota e por header. Fica no starter e só existe
+em aplicação servlet com `usage.servlet.enabled=true`. Você fornece um bean `TenantResolver<HttpServletRequest>` (tipicamente
+lê a claim do JWT que o Spring Security já validou).
+
+```yaml
+usage:
+  servlet:
+    enabled: true
+    refund-from-status: 500          # 5xx ou exceção: o uso é reportado e estornado (600 desliga)
+    routes:
+      - path: /orders/**             # padrão de path do Spring, casado com o path da requisição
+        metrics:
+          - code: API_REQUESTS
+      - path: /batches
+        metrics:
+          - code: ITEMS
+            cost-header: X-Item-Count   # ausente = 1; malformado ou repetido = 400
+```
+
+Uma requisição que casa com mais de uma rota paga todas as métricas delas; a que não casa com nenhuma não é medida.
+Recusa com 429 (cota, taxa, concorrência), 403 (sem política ou tenant não ligado), 503 (falha do armazém) e `Retry-After`.
+Diferente do gateway, os headers da requisição não são reescritos: o tenant, o plano e o overage ficam nos atributos
+`UsageInterceptor.TENANT_ATTRIBUTE`, `PLAN_ATTRIBUTE` e `OVERAGE_ATTRIBUTE`. Não há `InternalTraffic` aqui: serviço a serviço
+fica fora das rotas listadas, ou resolva o tenant como ausente.
+
+### Processador
 
 Ligado ao definir `usage.processor.metric`.
 
@@ -383,7 +408,7 @@ Ligado ao definir `usage.processor.metric`.
 | `usage.processor.tenant-header` | nome de header | `x-tenant-id` | Header da mensagem com o tenant. Sem ele o adaptador devolve `NO_TENANT` (vai para a DLQ) |
 | `usage.processor.defer-when-over-quota` | boolean | `false` | `true` adia (`DEFERRED`) o que chega com a cota já estourada, em vez de processar acima dela |
 
-### Consumidor central (precisa do jar `usage-consumer`)
+### Consumidor central (precisa do `jackson-databind`)
 
 | Propriedade | Tipo | Padrão | Descrição |
 |---|---|---|---|
@@ -392,7 +417,7 @@ Ligado ao definir `usage.processor.metric`.
 | `usage.consumer.max-future` | duração `>= 0` | `5m` | Quanto o `occurredAt` pode estar à frente do relógio (desvio de relógio); além disso, DLQ |
 | `usage.consumer.max-past` | duração `>= 0` | `90d` | Idade máxima de um evento; além disso, DLQ em vez de cair num período fechado |
 
-### Mensageria (precisa do jar `usage-messaging`)
+### Mensageria (precisa de `messaging-inbox` e/ou `outbox-core`)
 
 | Propriedade | Tipo | Padrão | Descrição |
 |---|---|---|---|
@@ -414,8 +439,8 @@ Ligado ao definir `usage.processor.metric`.
 | `usage.maintenance.interval` | duração `> 0` | `15m` | Intervalo entre execuções |
 
 Cada adaptador só aparece com o seu jar no classpath. Ligar um por propriedade **sem o jar** (`usage.gateway.enabled`
-sem `usage-gateway`, `usage.consumer.enabled` sem `usage-consumer`, `usage.processor.metric` sem `usage-processor`,
-`usage.messaging.*` sem `usage-messaging`) **falha o startup** dizendo qual jar falta, em vez de rodar sem medir.
+sem `spring-cloud-starter-gateway-server-webflux`, `usage.consumer.enabled` sem `jackson-databind`,
+`usage.messaging.*` sem `messaging-inbox`/`outbox-core`) **falha o startup** dizendo qual jar falta, em vez de rodar sem medir.
 Qualquer bean que você definir (`UsageEngine`, `CounterStore`, `PolicyStore`...) substitui o padrão.
 
 ### Telemetria
@@ -424,7 +449,7 @@ Qualquer bean que você definir (`UsageEngine`, `CounterStore`, `PolicyStore`...
 |---|---|---|---|
 | `usage.telemetry.enabled` | boolean | `true` | Métricas e traces pelo Micrometer, quando ele e um `MeterRegistry` estão presentes. `false` desliga (veja "Observabilidade") |
 
-### API de gestão (precisa dos jars `usage-admin` e `usage-postgres`)
+### API de gestão (precisa dos jar `usage-admin` e das bibliotecas do PostgreSQL)
 
 `usage.admin.enabled`, `.base-path`, `.tenants.write` e `.allow-unsecured`: descritas na seção "API de gestão (`usage-admin`)". São do starter, como as demais.
 
@@ -497,8 +522,10 @@ usage:
 
 ## Um serviço MVC que decide com o motor
 
+Este é o caso do serviço que **aceita trabalho** e só sabe se a requisição conta depois de validá-la. Um serviço MVC que é a **porta de entrada** do app e mede por rota e por header usa o interceptor (`usage.servlet.*`, acima); o gateway usa o filtro (`usage.gateway.*`). Já o `usage-admin` é um serviço de gestão e não mede nada.
+
 Um serviço servlet que aceita trabalho (um documento, um pedido) e quer aplicar limites **sem guardar planos nem contadores próprios** usa três peças, nenhuma delas um filtro:
-a política vem da API do usage (`usage-client`), os contadores ficam no Redis (`usage-redis`) e o serviço chama o `UsageAdmission` do starter em dois pontos.
+a política vem da API do usage (`HttpPolicyStore`, do core), os contadores ficam no Redis (adaptador Redis, do core) e o serviço chama o `UsageAdmission` do starter em dois pontos.
 
 ```yaml
 usage:
@@ -526,7 +553,7 @@ transaction.executeWithoutResult(status -> {
 
 - `UsageDenied` (`kind`: `RATE_LIMITED`, `QUOTA_EXCEEDED`, `SUBSCRIPTION_REQUIRED`, `UNAVAILABLE`; `retryAfterSeconds()`): o serviço o traduz no seu próprio erro (um `429` com `Retry-After`, um `403`...).
 - **O contador é atômico no Redis** (dois pods nunca passam do teto), mas **não** é parte da transação do banco: uma queda entre `consume` e o commit deixa o contador uma unidade acima até o fim do período. O evento de uso do aceite alimenta o resumo, e o reconciliador sobe o contador de volta se o Redis for perdido (o de acesso só sobe: nunca lê abaixo do ledger).
-- **Sem `usage-postgres`** o starter cria o motor sem ledger (só decide): `ingest` e compensação dizem por quê.
+- **Sem as bibliotecas do PostgreSQL (flyway)** o starter cria o motor sem ledger (só decide): `ingest` e compensação dizem por quê.
 - A API do usage serve a política em `GET /internal/policies/{tenant}`, sob a role `usage:policy-read` (só ela; não abre a gestão).
 - `Decision.retryAfter` (quanto falta para o período da cota ou da janela de taxa acabar) vale também para o `UsageGatewayFilter`, que responde `429` com `Retry-After`.
 - `UsageEngine.check(..., Set<Limit.Type>)` e `undoCheck(..., Set<Limit.Type>)` aplicam e devolvem só certos tipos de limite.
@@ -540,7 +567,8 @@ Módulo Spring **WebMVC** com os endpoints de manutenção, listagem e pesquisa.
 ```xml
 <dependency><groupId>com.example.usage</groupId><artifactId>usage-spring-boot-starter</artifactId></dependency>
 <dependency><groupId>com.example.usage</groupId><artifactId>usage-admin</artifactId></dependency>
-<dependency><groupId>com.example.usage</groupId><artifactId>usage-postgres</artifactId></dependency>
+<!-- o driver (e o Flyway, se o starter migra) são do host: no core e no admin são opcionais -->
+<dependency><groupId>org.postgresql</groupId><artifactId>postgresql</artifactId></dependency>
 ```
 
 Condições: aplicação servlet e **um** `DataSource` (as tabelas ficam no schema `usage.postgres.schema`, o mesmo do starter; com
@@ -621,17 +649,17 @@ Aqui a auditoria é gravada logo **depois** do ledger, não na mesma transação
 ```xml
 <dependency><groupId>com.example.usage</groupId><artifactId>usage-spring-boot-starter</artifactId></dependency> <!-- liga o módulo; UsageEngine, cache de política, migrations -->
 <dependency><groupId>com.example.usage</groupId><artifactId>usage-admin</artifactId></dependency>
-<dependency><groupId>com.example.usage</groupId><artifactId>usage-postgres</artifactId></dependency>
-<dependency><groupId>com.example.usage</groupId><artifactId>usage-redis</artifactId></dependency>           <!-- contadores: necessário para a compensação devolver a cota -->
+<!-- o driver (e o Flyway, se o starter migra) são do host: no core e no admin são opcionais -->
+<dependency><groupId>org.postgresql</groupId><artifactId>postgresql</artifactId></dependency>
 ```
 
 O starter sempre cria o `UsageEngine`, então a compensação manual (`POST /compensations`) existe sempre que a API existe. Ele pede um `CounterStore`: Redis
-(`usage-redis` e `usage.redis.uri`) quando a plataforma decide a cota, ou `usage.counters.type=memory` quando ela só gere e mede e a decisão é de outro (o contador em memória
+(lettuce e `usage.redis.uri`) quando a plataforma decide a cota, ou `usage.counters.type=memory` quando ela só gere e mede e a decisão é de outro (o contador em memória
 nunca é lido, e o aviso do starter sobre "mais de uma instância" não vale nesse caso). Ligar `usage.admin.enabled=true` sem o jar do módulo faz a aplicação falhar na subida.
 
 **2. Banco.** O módulo **não roda migrations**. As tabelas (a migration `V202611190001__usage_core.sql`) precisam existir no schema `usage.postgres.schema`
 (padrão `usage`): com o starter, `usage.postgres.migrate=true`; em um pipeline próprio, `UsageSchema.migrate(dataSource, "usage")`
-ou os arquivos de `usage-postgres/src/main/resources/db/usage/`.
+ou os arquivos de `usage-core/src/main/resources/db/usage/`.
 
 **3. Segurança** (obrigatória: sem isto a aplicação não sobe). Libere as rotas na sua cadeia, antes da regra que nega o resto,
 e ligue o `ProblemSecurityHandler` para o 401 e o 403 saírem no formato padrão:
@@ -845,7 +873,7 @@ defesas valem. O `eventId` precisa ser determinístico por item; o horário não
 
 ## Banco de dados
 
-Migration em `usage-postgres/src/main/resources/db/usage/`: uma só, `V202611190001__usage_core.sql` (o nome segue o padrão do engine, `V<aaaammdd><nnnn>__descrição.sql`). Com o projeto em desenvolvimento e sem instalação a atualizar, o schema inteiro vive nela e ela se edita no lugar; **quando houver uma instalação real**, congele esse arquivo e ponha cada mudança numa migration nova, com a data e a sequência seguintes. São 13 tabelas, em três grupos: **catálogo** (o que existe), **contratação** (quem assinou o quê) e **medição** (o que foi consumido).
+Migration em `usage-core/src/main/resources/db/usage/`: uma só, `V202611190001__usage_core.sql` (o nome segue o padrão do engine, `V<aaaammdd><nnnn>__descrição.sql`). Com o projeto em desenvolvimento e sem instalação a atualizar, o schema inteiro vive nela e ela se edita no lugar; **quando houver uma instalação real**, congele esse arquivo e ponha cada mudança numa migration nova, com a data e a sequência seguintes. São 13 tabelas, em três grupos: **catálogo** (o que existe), **contratação** (quem assinou o quê) e **medição** (o que foi consumido).
 
 **Catálogo** (cadastrado pelo seu sistema)
 
@@ -903,8 +931,8 @@ schema, eles usam o `search_path` como antes, **mas então o Flyway migra o sche
   têm autocomplete na IDE.
 
 ```bash
-cd usage-platform
-mvn test            # 265 testes; Redis e PostgreSQL reais em contêineres
+cd usage-library
+mvn test            # 301 testes; Redis e PostgreSQL reais em contêineres
 mvn install         # instala os módulos no repositório local
 ```
 
@@ -939,7 +967,7 @@ mvn install         # instala os módulos no repositório local
   linhas que outra transação está escrevendo (a próxima rodada as fecha): nenhum dos dois espera por linha, então não há
   deadlock entre consumidores nem com o job. `idle_in_transaction_session_timeout` menor que a duração de um job
   encerraria o lock do job antes da hora: deixe-o desligado ou maior.
-- O `usage-messaging` foi verificado contra RabbitMQ (acima), com a inbox montada à mão como no contrato da
+- O adaptador de mensageria foi verificado contra RabbitMQ (acima), com a inbox montada à mão como no contrato da
   própria messaging-library. Não foi verificado contra os outros provedores. O registro do handler pelo starter da
   messaging-library foi verificado pelo bean de mesmo nome do receiver (não por `@MessageListener`).
 - Mudar `usage.postgres.schema` depois de ter dados não move as tabelas: é outro conjunto vazio no schema novo.

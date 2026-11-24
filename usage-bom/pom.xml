@@ -11,18 +11,11 @@
   <version>0.1.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>usage-bom</name>
-  <description>Versions of every usage-platform module, to import with scope "import".</description>
+  <description>Versions of every usage-library module, to import with scope "import".</description>
 
   <dependencyManagement>
     <dependencies>
       <dependency><groupId>com.example.usage</groupId><artifactId>usage-core</artifactId><version>${project.version}</version></dependency>
-      <dependency><groupId>com.example.usage</groupId><artifactId>usage-gateway</artifactId><version>${project.version}</version></dependency>
-      <dependency><groupId>com.example.usage</groupId><artifactId>usage-processor</artifactId><version>${project.version}</version></dependency>
-      <dependency><groupId>com.example.usage</groupId><artifactId>usage-consumer</artifactId><version>${project.version}</version></dependency>
-      <dependency><groupId>com.example.usage</groupId><artifactId>usage-redis</artifactId><version>${project.version}</version></dependency>
-      <dependency><groupId>com.example.usage</groupId><artifactId>usage-postgres</artifactId><version>${project.version}</version></dependency>
-      <dependency><groupId>com.example.usage</groupId><artifactId>usage-client</artifactId><version>${project.version}</version></dependency>
-      <dependency><groupId>com.example.usage</groupId><artifactId>usage-messaging</artifactId><version>${project.version}</version></dependency>
       <dependency><groupId>com.example.usage</groupId><artifactId>usage-admin</artifactId><version>${project.version}</version></dependency>
       <dependency><groupId>com.example.usage</groupId><artifactId>usage-spring-boot-starter</artifactId><version>${project.version}</version></dependency>
     </dependencies>

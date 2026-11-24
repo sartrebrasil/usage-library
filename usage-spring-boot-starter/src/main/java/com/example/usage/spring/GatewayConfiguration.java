@@ -8,6 +8,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -19,7 +20,8 @@ import java.util.List;
 import java.util.function.ToLongFunction;
 
 @Configuration(proxyBeanMethods = false)
-@ConditionalOnClass({UsageGatewayFilter.class, GlobalFilter.class})
+@ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.REACTIVE)
+@ConditionalOnClass(GlobalFilter.class)
 @ConditionalOnProperty(name = "usage.gateway.enabled", havingValue = "true")
 class GatewayConfiguration {
 

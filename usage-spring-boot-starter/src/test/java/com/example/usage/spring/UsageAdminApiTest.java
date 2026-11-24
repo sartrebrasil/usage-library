@@ -54,7 +54,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /** The whole API against a real PostgreSQL: roles, the journey from catalog to billing, the rules, the audit trail and the policy the engine reads. */
 @Testcontainers
 @SpringBootTest(classes = UsageAdminApiTest.App.class, properties = {"spring.main.web-application-type=servlet", "usage.counters.type=memory",
-        "usage.postgres.migrate=true", "usage.policy-cache-ttl=1h", // an hour: only an explicit invalidation can make a change visible
+        "usage.postgres.enabled=true", "usage.postgres.migrate=true", "usage.policy-cache-ttl=1h", // an hour: only an explicit invalidation can make a change visible
         "usage.fail-mode=CLOSED", "spring.cloud.gateway.enabled=false", "spring.cloud.gateway.server.webflux.enabled=false"})
 @AutoConfigureMockMvc
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)

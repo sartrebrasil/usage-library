@@ -1,6 +1,8 @@
 # Plano: compensação manual no engine (`usage-api`)
 
-> Estado: **M1 (no lifecycle, T-204) e M2 feitos**; M4 (compensação por item) feito; falta só M3 (decisão: documentar). Texto original abaixo (o M1 foi para o lifecycle, §9). Antes: **plano; o M2 já está feito** (o `usage-api` usa o starter e tem o `UsageEngine`, T-203) e falta o M1, que alimenta o ledger. Levantado em 2026-11-23, depois dos commits `520d737` (usage-platform) e `91d0ce0` (engine).
+> **Nota (2026-11-24):** os módulos `usage-processor`, `usage-consumer`, `usage-client`, `usage-redis` e `usage-postgres` viraram pacotes do `usage-core`, e `usage-gateway` e `usage-messaging` viraram pacotes do `usage-spring-boot-starter` (nomes de pacote inalterados). Onde este plano cita esses módulos, leia como esses pacotes; as bibliotecas de terceiros continuam a ser declaradas pela aplicação (veja o README, "Módulos").
+
+> Estado: **M1 (no lifecycle, T-204) e M2 feitos**; M4 (compensação por item) feito; M3 resolvido com a biblioteca: o estorno devolve a cota no Redis (teste `aCompensationByTheAdminGivesBackTheQuotaTheEdgeConsumed`) se a gestão e a borda usam o mesmo Redis. Texto original abaixo (o M1 foi para o lifecycle, §9). Antes: **plano; o M2 já está feito** (o `usage-api` usa o starter e tem o `UsageEngine`, T-203) e falta o M1, que alimenta o ledger. Levantado em 2026-11-23, depois dos commits `520d737` (usage-library) e `91d0ce0` (engine).
 > Contexto: [`plano-integracao-engine.md`](plano-integracao-engine.md).
 
 ## 1. Por que a rota não existe hoje no `usage-api`

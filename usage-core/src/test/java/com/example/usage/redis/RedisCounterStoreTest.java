@@ -6,7 +6,9 @@ import com.example.usage.core.memory.InMemoryLedger;
 import com.example.usage.core.model.Limit;
 import com.example.usage.core.model.Limit.Enforcement;
 import com.example.usage.core.model.Limit.Type;
+import com.example.usage.core.model.Compensation;
 import com.example.usage.core.model.Metric;
+import com.example.usage.core.model.UsageEvent;
 import com.example.usage.core.model.Metric.Mode;
 import com.example.usage.core.model.Policy;
 import com.example.usage.core.model.TenantId;
@@ -210,5 +212,30 @@ class RedisCounterStoreTest {
         join(first.release());
         join(first.release()); // releasing twice is harmless
         assertTrue(join(engine.acquire(tenant, "ITEMS_PROCESSED", 1)).decision().allowed());
+    }
+
+    // M3: o estorno feito pela gestão (outro processo, com o ledger) devolve a cota que a borda consumiu, no mesmo Redis
+    @Test
+    void aCompensationByTheAdminGivesBackTheQuotaTheEdgeConsumed() {
+        Limit quota = new Limit(API, Type.QUOTA, 2, Duration.ofDays(30), Enforcement.REJECT);
+        var edge = engineOver(quota);
+        var admin = engineOver(quota); // o seu próprio ledger: é nele que o evento do aceite chega
+        TenantId tenant = new TenantId("refund-" + UUID.randomUUID());
+
+        assertTrue(join(edge.check(tenant, "API_REQUESTS", 1)).allowed());
+        assertTrue(join(edge.check(tenant, "API_REQUESTS", 1)).allowed());
+        assertEquals("quota_exceeded", join(edge.check(tenant, "API_REQUESTS", 1)).reason());
+        assertEquals(2, join(edge.usageOf(tenant, "API_REQUESTS", Type.QUOTA, NOON)));
+
+        // o evento de uso do primeiro aceite chega à gestão (o outbox do edge) e é estornado
+        UsageEvent accepted = new UsageEvent(UsageEvent.idFor(tenant, "doc-1", "API_REQUESTS"), tenant, "API_REQUESTS", 1, NOON);
+        assertEquals(UsageEngine.Ingest.APPLIED, join(admin.ingest(accepted)));
+        assertEquals(2, join(edge.usageOf(tenant, "API_REQUESTS", Type.QUOTA, NOON)), "o evento de acesso não conta de novo: a borda já o contou");
+        assertEquals(UsageEngine.Compensate.APPLIED,
+                join(admin.compensate(Compensation.of(accepted.eventId(), tenant, "API_REQUESTS", 1, NOON, "refund"))));
+
+        assertEquals(1, join(edge.usageOf(tenant, "API_REQUESTS", Type.QUOTA, NOON)), "a cota voltou no Redis que a borda lê");
+        assertTrue(join(edge.check(tenant, "API_REQUESTS", 1)).allowed(), "e o tenant volta a emitir");
+        assertEquals("quota_exceeded", join(edge.check(tenant, "API_REQUESTS", 1)).reason());
     }
 }

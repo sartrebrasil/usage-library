@@ -1,5 +1,7 @@
 # Plano: integração do `usage-admin` no engine (Fase 6)
 
+> **Nota (2026-11-24):** os módulos `usage-processor`, `usage-consumer`, `usage-client`, `usage-redis` e `usage-postgres` viraram pacotes do `usage-core`, e `usage-gateway` e `usage-messaging` viraram pacotes do `usage-spring-boot-starter` (nomes de pacote inalterados). Onde este plano cita esses módulos, leia como esses pacotes; as bibliotecas de terceiros continuam a ser declaradas pela aplicação (veja o README, "Módulos").
+
 > Estado: **avaliação e plano, nada foi alterado no engine.** Levantado em `engine/` (branch `main`, árvore limpa) em 2026-11-23.
 > Complementa a seção 9 de [`plano-usage-admin.md`](plano-usage-admin.md).
 
@@ -25,7 +27,7 @@ O T-31 já deixou escrito o destino: *"a verdade para cobrança futura é o even
    `created_by`; o nosso `tenant_plan` é um histórico com várias linhas). Colocar tudo no mesmo schema não funciona sem
    uma migração que reconcilie as duas, e o nosso `V1` não serve em cima do schema do engine.
 2. **Garantia diferente.** A cota mensal do engine é **exata** (Postgres, mesma transação do aceite, com teste de corrida).
-   O `check` do usage-platform é **aproximado** por projeto (Redis é cache de decisão; o ledger é que é exato, depois).
+   O `check` do usage-library é **aproximado** por projeto (Redis é cache de decisão; o ledger é que é exato, depois).
    Trocar o `Quotas` do outcome-api pelo `UsageEngine` enfraquece a garantia e exige **Redis, que o engine não tem**.
 3. **Dois endpoints de tenant.** `POST /v1/tenants` (engine: grava `created_by`, associa clients) e
    `POST /v1/usage/tenants` (nosso). O nosso falharia no `created_by NOT NULL` e não conhece o Keycloak.
@@ -34,7 +36,7 @@ O T-31 já deixou escrito o destino: *"a verdade para cobrança futura é o even
    também não serve (o usuário do app não tem DDL).
 5. **Sem Redis no engine.** Por isso a compensação manual (que precisa do `UsageEngine` e de um `CounterStore`) **não
    existe** na `tenant-api`: a rota some sozinha sem o bean. É o comportamento correto até haver Redis.
-6. **Calendário.** O engine conta o **mês UTC**; o usage-platform conta pelo **ciclo da assinatura** (âncora). Para ficar
+6. **Calendário.** O engine conta o **mês UTC**; o usage-library conta pelo **ciclo da assinatura** (âncora). Para ficar
    equivalente, a assinatura nasce com âncora no dia 1, 00:00 UTC.
 7. **O renome `tenant-api` → `usage-api` e `schema tenant` → `usage` é grande e independente** da integração: toca a
    pasta e o `artifactId` do módulo, `Dockerfile*`, `devspace.yaml`, `k8s/`, `ops/containers`, o client e a audiência
@@ -54,7 +56,7 @@ O T-31 já deixou escrito o destino: *"a verdade para cobrança futura é o even
 
 A rota A deixa a porta aberta para a B depois, se a aproximação for aceitável. Hoje não há razão para pagar esse custo.
 
-## 4. Mudanças no próprio `usage-platform` (antes de tocar o engine)
+## 4. Mudanças no próprio `usage-library` (antes de tocar o engine)
 
 | # | Mudança | Por quê |
 |---|---|---|
@@ -90,7 +92,7 @@ renome para `usage-api`, e a rota B só se a medição provar que vale.
   aparece em ambiente real.
 - **Mudança de plano e cache:** vale em até `planCacheTtl` do outcome-api; sem mudança em relação a hoje.
 - **`problem.enabled=false`** faria as `ApiException` do `usage-admin` virarem 500 (a `tenant-api` já usa o starter).
-- **Versões:** o engine usa Boot 4.1.1 e o usage-platform declara 4.2.0; funcionou nos testes, mas só o build do engine confirma.
+- **Versões:** o engine usa Boot 4.1.1 e o usage-library declara 4.2.0; funcionou nos testes, mas só o build do engine confirma.
 
 ## 7. Decisões que preciso de você
 
@@ -125,7 +127,7 @@ Feita no engine (sem commit): T-196 a T-200 em `engine/docs/tasks.md`. O que fic
 - **Schema único** com uma execução do Flyway (`classpath:db/usage` e `classpath:db/usage-api/{vendor}`); a imagem de migração também extrai o SQL do jar `usage-postgres`.
 - **`/v1/usage` no `usage-api`** com as roles `usage:read|write|compensate` (no realm e no `dev-platform-admin`); `tenants.write=false`; a rota de compensação **não existe** lá (sem Redis nem `UsageEngine`).
 - **Plano compatível:** `PlanProjection` (métrica `DOCUMENTS`: `QUOTA` de 1 mês e `RATE` de 1 s). `PUT/GET /v1/tenants/{id}/plan` e a `tenant_plan` foram removidos; o `outcome-api` não mudou a regra.
-- **Pendências:** publicar o usage-platform num remoto para o `ops/install-libraries.sh` (hoje `mvn install` local); validar a imagem de migração e o deploy no kind; a etapa B1 (consumir `DocumentReceived` para o ledger) e a rota B seguem fora.
+- **Pendências:** publicar o usage-library num remoto para o `ops/install-libraries.sh` (hoje `mvn install` local); validar a imagem de migração e o deploy no kind; a etapa B1 (consumir `DocumentReceived` para o ledger) e a rota B seguem fora.
 - **Cadastro de tenant (T-201):** como a tabela `tenant` é uma só, o `usage-api` deixou de ter o seu próprio cadastro (`POST /v1/tenants`, `insert` no repositório); quem cadastra e consulta tenants é
   a `usage-admin` (`/v1/usage/tenants`). O `usage-api` confere a existência com `TenantAdmin.find` e cuida só dos clients do Keycloak. A propriedade `usage.admin.tenants.write=false`
   continua disponível para quem quiser outro dono do cadastro.

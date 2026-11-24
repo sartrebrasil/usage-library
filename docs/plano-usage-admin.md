@@ -1,5 +1,7 @@
 # Plano: módulo `usage-admin` (gestão por API)
 
+> **Nota (2026-11-24):** os módulos `usage-processor`, `usage-consumer`, `usage-client`, `usage-redis` e `usage-postgres` viraram pacotes do `usage-core`, e `usage-gateway` e `usage-messaging` viraram pacotes do `usage-spring-boot-starter` (nomes de pacote inalterados). Onde este plano cita esses módulos, leia como esses pacotes; as bibliotecas de terceiros continuam a ser declaradas pela aplicação (veja o README, "Módulos").
+
 > Estado: **fases 1 a 5 implementadas** no módulo `usage-admin` (leitura, auditoria, catálogo, contratação e compensação).
 > Falta a fase 6, a integração no engine, que é trabalho do outro projeto. Decisões na seção 1 e em "Decisões da rodada 2".
 

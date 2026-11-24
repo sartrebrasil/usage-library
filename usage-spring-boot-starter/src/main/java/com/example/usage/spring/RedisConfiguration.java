@@ -14,7 +14,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.util.Assert;
 
 @Configuration(proxyBeanMethods = false)
-@ConditionalOnClass(RedisCounterStore.class)
+@ConditionalOnClass(RedisClient.class) // lettuce is optional in usage-core
 @ConditionalOnProperty(name = "usage.counters.type", havingValue = "redis", matchIfMissing = true)
 @ConditionalOnMissingBean(CounterStore.class) // a CounterStore of your own needs neither the Redis client nor its uri
 class RedisConfiguration {

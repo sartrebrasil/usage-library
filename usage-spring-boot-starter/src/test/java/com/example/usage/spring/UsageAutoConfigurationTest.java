@@ -22,7 +22,7 @@ import com.example.usage.gateway.UsageGatewayFilter;
 import com.example.usage.processor.QueueUsageAdapter;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
-import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.boot.test.context.runner.ReactiveWebApplicationContextRunner;
 import org.springframework.context.SmartLifecycle;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -67,7 +67,7 @@ class UsageAutoConfigurationTest {
         @Bean UsageSink sink() { return message -> CompletableFuture.completedFuture(null); }
     }
 
-    final ApplicationContextRunner runner = new ApplicationContextRunner()
+    final ReactiveWebApplicationContextRunner runner = new ReactiveWebApplicationContextRunner()
             .withConfiguration(AutoConfigurations.of(UsageAutoConfiguration.class))
             .withUserConfiguration(HostStores.class)
             .withPropertyValues("usage.counters.type=memory");
@@ -95,7 +95,7 @@ class UsageAutoConfigurationTest {
     @Test
     void anApplicationThatOnlyDecidesNeedsNoLedgerAndGetsTheAdmissionWhenAsked() {
         // no usage-postgres, no Ledger bean: the engine still exists (it decides), and ingest says why it cannot
-        new ApplicationContextRunner()
+        new ReactiveWebApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(UsageAutoConfiguration.class))
                 .withBean(PolicyStore.class, () -> tenant -> CompletableFuture.completedFuture(Optional.empty()))
                 .withPropertyValues("usage.counters.type=memory", "usage.admission.metric=DOCUMENTS")
@@ -136,7 +136,7 @@ class UsageAutoConfigurationTest {
         Metric items = new Metric("ITEMS_PROCESSED", Mode.REPORT_ONLY);
         PolicyStore oneAtATime = tenant -> CompletableFuture.completedFuture(Optional.of(
                 new Policy(Instant.parse("2020-01-01T00:00:00Z"), List.of(Limit.concurrency(items, 1)))));
-        new ApplicationContextRunner()
+        new ReactiveWebApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(UsageAutoConfiguration.class))
                 .withBean(PolicyStore.class, () -> oneAtATime).withBean(InMemoryLedger.class, InMemoryLedger::new)
                 .withBean(java.time.Clock.class, () -> moving)
@@ -154,7 +154,7 @@ class UsageAutoConfigurationTest {
 
     @Test
     void withoutAPolicyStoreAndLedgerTheContextFailsAndSaysWhatIsMissing() {
-        new ApplicationContextRunner()
+        new ReactiveWebApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(UsageAutoConfiguration.class))
                 .withPropertyValues("usage.counters.type=memory")
                 .run(ctx -> assertThat(ctx).hasFailed().getFailure().hasMessageContaining("PolicyStore"));
@@ -162,7 +162,7 @@ class UsageAutoConfigurationTest {
 
     @Test
     void redisCountersNeedAnUri() {
-        new ApplicationContextRunner()
+        new ReactiveWebApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(UsageAutoConfiguration.class))
                 .withUserConfiguration(HostStores.class)
                 .run(ctx -> assertThat(ctx).hasFailed().getFailure().hasStackTraceContaining("usage.redis.uri is required"));
@@ -221,7 +221,7 @@ class UsageAutoConfigurationTest {
                 .withBean("sink2", UsageSink.class, () -> message -> CompletableFuture.completedFuture(null)) // two sinks: ambiguous
                 .withPropertyValues("usage.gateway.enabled=true", "usage.gateway.metrics[0].code=API_REQUESTS")
                 .run(ctx -> assertThat(ctx).hasFailed().getFailure().hasStackTraceContaining("needs exactly one UsageSink"));
-        new ApplicationContextRunner()
+        new ReactiveWebApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(UsageAutoConfiguration.class))
                 .withUserConfiguration(HostStores.class)
                 .withBean(TenantResolver.class, () -> (TenantResolver<ServerWebExchange>) ex -> CompletableFuture.completedFuture(Optional.of(new TenantId("acme"))))
@@ -234,7 +234,7 @@ class UsageAutoConfigurationTest {
 
     @Test
     void aCounterStoreOfTheHostMeansNoRedisClientAndNoUri() {
-        new ApplicationContextRunner()
+        new ReactiveWebApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(UsageAutoConfiguration.class))
                 .withUserConfiguration(HostStores.class)
                 .withBean(CounterStore.class, () -> new InMemoryCounterStore(java.time.Clock.systemUTC())) // default properties: type=redis, no uri
@@ -306,9 +306,8 @@ class UsageAutoConfigurationTest {
     void theStarterWorksWithoutAnyOptionalModuleOnTheClasspath() {
         // that the filter really hides these classes is proved where a property needs one: StarterBrokerTest, missing-jar failure
         runner.withClassLoader(new org.springframework.boot.test.context.FilteredClassLoader(
-                        com.example.usage.gateway.UsageGatewayFilter.class, com.example.usage.consumer.UsageEventConsumer.class,
-                        com.example.usage.processor.QueueUsageAdapter.class, com.example.usage.redis.RedisCounterStore.class,
-                        com.example.usage.postgres.JdbcLedger.class))
+                        org.springframework.cloud.gateway.filter.GlobalFilter.class, tools.jackson.databind.json.JsonMapper.class,
+                        io.lettuce.core.RedisClient.class, org.flywaydb.core.Flyway.class))
                 .run(ctx -> {
                     assertThat(ctx).hasNotFailed().hasSingleBean(UsageEngine.class); // no NoClassDefFoundError from a missing jar
                     assertThat(ctx).doesNotHaveBean(UsageGatewayFilter.class).doesNotHaveBean(UsageEventConsumer.class);

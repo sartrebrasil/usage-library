@@ -15,7 +15,7 @@ import com.example.usage.postgres.JdbcSummaryStore;
 import com.example.usage.postgres.UsageSchema;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -27,7 +27,7 @@ import javax.sql.DataSource;
 import static com.example.usage.spring.UsageAutoConfiguration.EXECUTOR;
 
 @Configuration(proxyBeanMethods = false)
-@ConditionalOnClass(JdbcLedger.class)
+@ConditionalOnProperty(name = "usage.postgres.enabled", havingValue = "true")
 @ConditionalOnBean(DataSource.class)
 class PostgresConfiguration {
 

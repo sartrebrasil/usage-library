@@ -70,7 +70,7 @@ class StarterEndToEndTest {
                 .withBean(DataSource.class, () -> ds)
                 .withPropertyValues(
                         "usage.redis.uri=redis://" + REDIS.getHost() + ":" + REDIS.getMappedPort(6379),
-                        "usage.postgres.migrate=true",
+                        "usage.postgres.enabled=true", "usage.postgres.migrate=true",
                         "usage.fail-mode=CLOSED",
                         "usage.consumer.enabled=true",
                         "usage.consumer.known-metrics=API_REQUESTS",
@@ -116,7 +116,7 @@ class StarterEndToEndTest {
             new ApplicationContextRunner()
                     .withConfiguration(AutoConfigurations.of(UsageAutoConfiguration.class))
                     .withBean(DataSource.class, () -> ds)
-                    .withPropertyValues(redis, "usage.postgres.migrate=" + migrate, "usage.postgres.schema=" + (migrate ? "flagon" : "flagoff"))
+                    .withPropertyValues(redis, "usage.postgres.enabled=true", "usage.postgres.migrate=" + migrate, "usage.postgres.schema=" + (migrate ? "flagon" : "flagoff"))
                     .run(ctx -> assertThat(ctx).hasNotFailed().hasSingleBean(UsageEngine.class));
         }
         try (Connection c = ds.getConnection(); var st = c.createStatement()) {
@@ -132,7 +132,7 @@ class StarterEndToEndTest {
         new ApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(UsageAutoConfiguration.class))
                 .withBean(DataSource.class, StarterEndToEndTest::dataSource)
-                .withPropertyValues("usage.redis.uri=redis://" + REDIS.getHost() + ":" + REDIS.getMappedPort(6379), "usage.postgres.schema=Usage; DROP TABLE x")
+                .withPropertyValues("usage.redis.uri=redis://" + REDIS.getHost() + ":" + REDIS.getMappedPort(6379), "usage.postgres.enabled=true", "usage.postgres.schema=Usage; DROP TABLE x")
                 .run(ctx -> assertThat(ctx).hasFailed().getFailure().hasStackTraceContaining("lowercase identifier"));
     }
 
@@ -144,7 +144,7 @@ class StarterEndToEndTest {
                 .withConfiguration(AutoConfigurations.of(UsageAutoConfiguration.class))
                 .withBean(DataSource.class, () -> ds)
                 .withPropertyValues("usage.redis.uri=redis://" + REDIS.getHost() + ":" + REDIS.getMappedPort(6379),
-                        "usage.postgres.migrate=true", "usage.fail-mode=CLOSED", "usage.redis.command-timeout=400ms")
+                        "usage.postgres.enabled=true", "usage.postgres.migrate=true", "usage.fail-mode=CLOSED", "usage.redis.command-timeout=400ms")
                 .run(ctx -> {
                     seedIfNeeded(ds);
                     ctx.getBean(JdbcSubscriptions.class).subscribe(new TenantId("slowco"), "E2E", 1, Instant.parse("2020-01-01T00:00:00Z"));

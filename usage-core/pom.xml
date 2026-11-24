@@ -6,19 +6,28 @@
 
   <parent>
     <groupId>com.example.usage</groupId>
-    <artifactId>usage-platform</artifactId>
+    <artifactId>usage-library</artifactId>
     <version>0.1.0-SNAPSHOT</version>
   </parent>
 
   <artifactId>usage-core</artifactId>
   <name>usage-core</name>
-  <description>Entitlements + metering engine: no Spring, no gateway, no broker.</description>
+  <description>Entitlements + metering engine with its adapters (processor, consumer, policy client, Redis, PostgreSQL). Third-party libraries are optional: add the ones for the adapters you use.</description>
 
   <dependencies>
+    <!-- optional: each is needed only by the adapter that uses it (consumer/client: jackson, client: spring-web, redis: lettuce, postgres: flyway + driver) -->
+    <dependency><groupId>tools.jackson.core</groupId><artifactId>jackson-databind</artifactId><optional>true</optional></dependency>
+    <dependency><groupId>org.springframework</groupId><artifactId>spring-web</artifactId><optional>true</optional></dependency>
+    <dependency><groupId>io.lettuce</groupId><artifactId>lettuce-core</artifactId><optional>true</optional></dependency>
+    <dependency><groupId>org.flywaydb</groupId><artifactId>flyway-core</artifactId><optional>true</optional></dependency>
+    <dependency><groupId>org.flywaydb</groupId><artifactId>flyway-database-postgresql</artifactId><optional>true</optional></dependency>
+    <dependency><groupId>org.postgresql</groupId><artifactId>postgresql</artifactId><optional>true</optional></dependency>
     <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency><groupId>org.testcontainers</groupId><artifactId>testcontainers-junit-jupiter</artifactId><scope>test</scope></dependency>
+    <dependency><groupId>org.testcontainers</groupId><artifactId>testcontainers-postgresql</artifactId><scope>test</scope></dependency>
   </dependencies>
 </project>

@@ -5,20 +5,13 @@
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>com.example.usage</groupId>
-  <artifactId>usage-platform</artifactId>
+  <artifactId>usage-library</artifactId>
   <version>0.1.0-SNAPSHOT</version>
   <packaging>pom</packaging>
 
   <modules>
     <module>usage-bom</module>
     <module>usage-core</module>
-    <module>usage-gateway</module>
-    <module>usage-processor</module>
-    <module>usage-consumer</module>
-    <module>usage-redis</module>
-    <module>usage-postgres</module>
-    <module>usage-client</module>
-    <module>usage-messaging</module>
     <module>usage-admin</module>
     <module>usage-spring-boot-starter</module>
     <module>usage-demo</module>

@@ -26,6 +26,7 @@ usage:
   redis:
     uri: redis://localhost:6379
   postgres:
+    enabled: true
     migrate: true              # creates the platform's tables, in the "usage" schema
   gateway:
     enabled: true

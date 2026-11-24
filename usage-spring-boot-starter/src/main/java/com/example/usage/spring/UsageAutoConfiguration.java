@@ -38,6 +38,7 @@ import java.util.concurrent.Executors;
         RedisConfiguration.class,
         MemoryCountersConfiguration.class,
         GatewayConfiguration.class,
+        ServletConfiguration.class,
         ProcessorConfiguration.class,
         ConsumerConfiguration.class,
         AdminConfiguration.class,
